@@ -91,3 +91,23 @@ function Measurements({ user, setActivePage }) {
 
   const today = new Date().toISOString().split("T")[0];
   const userName = user.email.split("@")[0];
+
+// loads all reminders from firebase
+  // converts object to array for easier mapping
+  useEffect(() => {
+    if (!user) return;
+    const remindersRef = ref(database, `users/${user.uid}/reminders`);
+    onValue(remindersRef, (snapshot) => {
+      if (snapshot.val()) {
+        const data = Object.entries(snapshot.val()).map(([id, reminder]) => ({
+          id,
+          ...reminder,
+        }));
+        setReminders(data);
+      } else {
+        setReminders([]);
+      }
+    });
+  }, [user]);
+
+}
