@@ -2695,6 +2695,458 @@ function FitnessPage({ user, setActivePage }) {
   );
 }
 
+// HEALTH PROFILE COMPONENT
+// User profile page showing personal info, medical data, and account settings
+// ══════════════════════════════════════════════════════════════════════════════
+
+function HealthProfile({ user, medications, setActivePage, voiceEnabled }) {
+  // ─── State Variables ────────────────────────────────────────────────────────
+
+  // Profile data object containing all user information
+  const [profile, setProfile] = useState({
+    fullName: "",
+    phone: "",
+    dob: "",
+    emergencyContact: "",
+    emergencyContactPhone: "",
+    allergies: "",
+    language: "English",
+    accessibilityNeeds: "",
+  });
+
+  // Whether user is currently editing their profile
+  const [editing, setEditing] = useState(false);
+
+  // Extract username from email
+  const userName = user.email.split("@")[0];
+
+  // ─── Read Profile Aloud Function ────────────────────────────────────────────
+  const readProfileAloud = () => {
+    if (!window.speechSynthesis) {
+      alert("Speech synthesis not supported in this browser");
+      return;
+    }
+
+    // Cancel any currently speaking text
+    window.speechSynthesis.cancel();
+
+    // Build the message
+    let message = `Health Profile for ${profile.fullName || userName}. `;
+
+    // Personal Information
+    message += `Email: ${user.email}. `;
+
+    if (profile.phone) {
+      message += `Phone: ${profile.phone}. `;
+    }
+
+    if (profile.dob) {
+      const dobDate = new Date(profile.dob).toLocaleDateString("en-GB", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      });
+      message += `Date of Birth: ${dobDate}. `;
+    }
+
+    // Medical Information
+    if (profile.emergencyContact) {
+      message += `Emergency Contact: ${profile.emergencyContact}. `;
+      if (profile.emergencyContactPhone) {
+        message += `Emergency Contact Phone: ${profile.emergencyContactPhone}. `;
+      }
+    }
+
+    if (medications.length > 0) {
+      message += `Current Medications: ${medications.map((med) => med.name).join(", ")}. `;
+    } else {
+      message += `No current medications. `;
+    }
+
+    if (profile.allergies) {
+      message += `Allergies: ${profile.allergies}. `;
+    } else {
+      message += `No allergies reported. `;
+    }
+
+    // Accessibility needs
+    if (profile.accessibilityNeeds) {
+      message += `Accessibility Needs: ${profile.accessibilityNeeds}. `;
+    } else {
+      message += `No accessibility needs specified. `;
+    }
+
+    // Preferences
+    message += `Preferred Language: ${profile.language || "English"}. `;
+
+    // Account info
+    message += `Account created: ${createdMonth}. `;
+    message += `Total medications tracked: ${medications.length}. `;
+
+    // Create and speak the utterance
+    const utterance = new SpeechSynthesisUtterance(message);
+    utterance.rate = 0.9; // Slightly slower for clarity
+    utterance.pitch = 1.0;
+    utterance.volume = 1.0;
+    utterance.lang = "en-GB";
+
+    utterance.onerror = (event) => {
+      console.error("Speech synthesis error:", event);
+    };
+
+    window.speechSynthesis.speak(utterance);
+  };
+
+  // ─── Load Profile Data Effect ───────────────────────────────────────────────
+
+  // Load user profile from Firebase when component mounts
+  useEffect(() => {
+    if (!user) return;
+
+    // Reference to user's profile data
+    const profileRef = ref(database, `users/${user.uid}/profile`);
+
+    // Listen for changes
+    onValue(profileRef, (snapshot) => {
+      // If profile exists, update state
+      if (snapshot.val()) setProfile(snapshot.val());
+    });
+  }, [user]);
+
+  // ─── Save Profile Function ──────────────────────────────────────────────────
+
+  // Function to save profile changes to Firebase
+  const saveProfile = async () => {
+    // Update Firebase with current profile state
+    await update(ref(database, `users/${user.uid}/profile`), profile);
+
+    // Exit editing mode
+    setEditing(false);
+  };
+
+  // ─── Delete Account Function ────────────────────────────────────────────────
+
+  // Function to permanently delete user account and all data
+  const deleteAccount = async () => {
+    // Confirm with user before proceeding (dangerous action!)
+    if (window.confirm("Are you sure? This cannot be undone.")) {
+      // Delete all user data from Firebase
+      await remove(ref(database, `users/${user.uid}`));
+
+      // Delete Firebase authentication account
+      await deleteUser(auth.currentUser);
+    }
+  };
+
+  // ─── Calculate Account Creation Date ───────────────────────────────────────
+
+  // Format account creation date as "Feb 2026"
+  const createdMonth = new Date(
+    user.metadata?.creationTime || Date.now(),
+  ).toLocaleDateString("en-GB", { month: "short", year: "numeric" });
+
+  // ─── Render Profile UI ──────────────────────────────────────────────────────
+
+  return (
+    <div className="page">
+      {/* ═══ PAGE HEADER ═══ */}
+      <div className="page-header-bar">
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <button
+            className="back-btn"
+            onClick={() => setActivePage("dashboard")}
+          >
+            ←
+          </button>
+          <h1 className="page-title-main">Health Profile</h1>
+        </div>
+
+        {/* Right side buttons */}
+        <div className="header-right">
+          {/* Read aloud button */}
+          <button
+            className="voice-outline-btn"
+            onClick={readProfileAloud}
+            title="Read profile information aloud"
+          >
+            🔊 Read
+          </button>
+
+          {/* Edit/Save button - toggles based on editing state */}
+          <button
+            className="edit-dark-btn"
+            onClick={() => (editing ? saveProfile() : setEditing(true))}
+          >
+            ✏️ {editing ? "Save" : "Edit"}
+          </button>
+        </div>
+      </div>
+
+      {/* ═══ PROFILE PAGE CONTENT ═══ */}
+      <div className="profile-page">
+        {/* ─── AVATAR CARD ─── */}
+        <div className="profile-card">
+          {/* Avatar icon */}
+          <div className="profile-avatar">👤</div>
+          <div>
+            {/* Display full name or fallback to username */}
+            <div className="profile-name">{profile.fullName || userName}</div>
+            <div className="profile-handle">@{userName}</div>
+          </div>
+        </div>
+
+        {/* ─── PERSONAL INFORMATION CARD ─── */}
+        <div className="profile-card">
+          <h3 className="profile-section-title">Personal Information</h3>
+
+          {/* Grid of personal info fields */}
+          <div className="profile-grid">
+            {/* Full Name field - editable when in edit mode */}
+            <div className="profile-field">
+              <div className="profile-field-label">Full Name</div>
+              {editing ? (
+                <input
+                  className="form-input"
+                  value={profile.fullName}
+                  onChange={(e) =>
+                    setProfile({ ...profile, fullName: e.target.value })
+                  }
+                />
+              ) : (
+                <div className="profile-field-value">
+                  {profile.fullName || userName}
+                </div>
+              )}
+            </div>
+
+            {/* Email field - not editable (comes from auth) */}
+            <div className="profile-field">
+              <div className="profile-field-label">Email</div>
+              <div className="profile-field-value">{user.email}</div>
+            </div>
+
+            {/* Phone field */}
+            <div className="profile-field">
+              <div className="profile-field-label">Phone</div>
+              {editing ? (
+                <input
+                  className="form-input"
+                  value={profile.phone}
+                  onChange={(e) =>
+                    setProfile({ ...profile, phone: e.target.value })
+                  }
+                  placeholder="+44 7700 900000"
+                />
+              ) : (
+                <div className="profile-field-value">
+                  {profile.phone || "Not set"}
+                </div>
+              )}
+            </div>
+
+            {/* Date of Birth field */}
+            <div className="profile-field">
+              <div className="profile-field-label">Date of Birth</div>
+              {editing ? (
+                <input
+                  type="date"
+                  className="form-input"
+                  value={profile.dob}
+                  onChange={(e) =>
+                    setProfile({ ...profile, dob: e.target.value })
+                  }
+                />
+              ) : (
+                <div className="profile-field-value">
+                  {profile.dob
+                    ? new Date(profile.dob).toDateString()
+                    : "Not set"}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* ─── MEDICAL INFORMATION CARD ─── */}
+        <div className="profile-card">
+          <h3 className="profile-section-title">Medical Information</h3>
+
+          <div className="profile-grid">
+            {/* Emergency Contact */}
+            <div className="profile-field">
+              <div className="profile-field-label">Emergency Contact</div>
+              {editing ? (
+                <input
+                  className="form-input"
+                  value={profile.emergencyContact}
+                  onChange={(e) =>
+                    setProfile({ ...profile, emergencyContact: e.target.value })
+                  }
+                  placeholder="e.g., John Smith (Father)"
+                />
+              ) : (
+                <div className="profile-field-value">
+                  {profile.emergencyContact || "Not set"}
+                </div>
+              )}
+            </div>
+
+            {/* Emergency Contact Phone */}
+            <div className="profile-field">
+              <div className="profile-field-label">Emergency Contact Phone</div>
+              {editing ? (
+                <input
+                  className="form-input"
+                  type="tel"
+                  value={profile.emergencyContactPhone}
+                  onChange={(e) =>
+                    setProfile({
+                      ...profile,
+                      emergencyContactPhone: e.target.value,
+                    })
+                  }
+                  placeholder="e.g., +44 7711 223344"
+                />
+              ) : (
+                <div className="profile-field-value">
+                  {profile.emergencyContactPhone || "Not set"}
+                </div>
+              )}
+            </div>
+
+            {/* Current Medications - auto-populated from medications list */}
+            <div className="profile-field">
+              <div className="profile-field-label">Current Medications</div>
+              <ul className="profile-list">
+                {medications.map((med) => (
+                  <li key={med.id}>{med.name}</li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Allergies */}
+            <div className="profile-field">
+              <div className="profile-field-label">Allergies</div>
+              {editing ? (
+                <input
+                  className="form-input"
+                  value={profile.allergies}
+                  onChange={(e) =>
+                    setProfile({ ...profile, allergies: e.target.value })
+                  }
+                  placeholder="e.g. Penicillin"
+                />
+              ) : (
+                <div className="profile-field-value">
+                  {profile.allergies || "None reported"}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* ─── ACCESSIBILITY & PREFERENCES CARD ─── */}
+        <div className="profile-card">
+          <h3 className="profile-section-title">Accessibility & Preferences</h3>
+
+          <div className="profile-grid">
+            {/* Accessibility Needs */}
+            <div className="profile-field">
+              <div className="profile-field-label">Accessibility Needs</div>
+              {editing ? (
+                <textarea
+                  className="form-input form-textarea"
+                  value={profile.accessibilityNeeds}
+                  onChange={(e) =>
+                    setProfile({
+                      ...profile,
+                      accessibilityNeeds: e.target.value,
+                    })
+                  }
+                  placeholder="e.g., Large text, screen reader, high contrast..."
+                  style={{ minHeight: "60px" }}
+                />
+              ) : (
+                <div className="profile-field-value">
+                  {profile.accessibilityNeeds || "None specified"}
+                </div>
+              )}
+            </div>
+
+            {/* Preferred Language */}
+            <div className="profile-field">
+              <div className="profile-field-label">Preferred Language</div>
+              {editing ? (
+                <select
+                  className="form-input"
+                  value={profile.language}
+                  onChange={(e) =>
+                    setProfile({ ...profile, language: e.target.value })
+                  }
+                >
+                  {[
+                    "English",
+                    "Spanish",
+                    "French",
+                    "German",
+                    "Urdu",
+                    "Arabic",
+                  ].map((lang) => (
+                    <option key={lang}>{lang}</option>
+                  ))}
+                </select>
+              ) : (
+                <div className="profile-field-value">{profile.language}</div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* ─── STATISTICS ROW ─── */}
+        <div className="profile-stats-row">
+          {/* Three stat cards showing account info */}
+          {[
+            {
+              icon: "📅",
+              value: createdMonth,
+              label: "Account Created",
+              color: "#3b82f6",
+            },
+            {
+              icon: "💊",
+              value: medications.length,
+              label: "Medications Tracked",
+              color: "#22c55e",
+            },
+            { icon: "📈", value: "0", label: "Days Active", color: "#8b5cf6" },
+          ].map((stat, index) => (
+            <div className="profile-stat-card" key={index}>
+              <div style={{ fontSize: 24, color: stat.color }}>{stat.icon}</div>
+              <div className="profile-stat-value">{stat.value}</div>
+              <div className="profile-stat-label">{stat.label}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* ─── DANGER ZONE (Delete Account) ─── */}
+        <div className="danger-zone">
+          <h3 className="danger-title">Delete Account</h3>
+          <p className="danger-desc">
+            Permanently delete your account, including all health profiles,
+            medications, fitness data, and assistant chats. This action cannot
+            be undone.
+          </p>
+
+          {/* Delete Account button - triggers deleteAccount function */}
+          <button className="delete-account-btn" onClick={deleteAccount}>
+            🗑️ Delete Account
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
 
   // user - the currently logged-in user (null if not logged in)
