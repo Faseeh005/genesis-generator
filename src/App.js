@@ -2376,6 +2376,325 @@ function Medications({
   );
 }
 
+// Page for tracking workouts and viewing fitness statistics
+// Shows workout cards, summary stats, and step counter
+function FitnessPage({ user, setActivePage }) {
+
+  // fitness - stores today's fitness data
+  const [fitness, setFitness] = useState({
+    steps: 0,
+    water: 0,
+    activities: [],
+  });
+
+  // Controls whether the "Add Workout" form is visible
+  const [showAddWorkout, setShowAddWorkout] = useState(false);
+
+  // Form fields for adding a new workout
+  const [workoutName, setWorkoutName] = useState("");
+  const [workoutCount, setWorkoutCount] = useState(""); // Number of reps/steps
+  const [workoutDuration, setWorkoutDuration] = useState(""); // Minutes
+
+  // Get today's date
+  const today = new Date().toISOString().split("T")[0];
+
+  // Get username for display
+  const userName = user.email.split("@")[0];
+
+  // Load Fitness Data Effect
+
+  // Load today's fitness data from Firebase when component mounts
+  useEffect(() => {
+    if (!user) return;
+
+    // Reference to today's fitness data
+    const fitnessRef = ref(database, `users/${user.uid}/fitness/${today}`);
+
+    // Listen for changes and update state
+    onValue(fitnessRef, (snapshot) => {
+      if (snapshot.val()) setFitness(snapshot.val());
+    });
+  }, [user, today]);
+
+  // Calculate Statistics
+
+  // Get activities array, default to empty if not available
+  const activities = fitness.activities || [];
+
+  // Get steps count
+  const steps = fitness.steps || 0;
+
+  // Calculate total minutes of all activities
+  const totalMins = activities.reduce(
+    (sum, activity) => sum + (activity.duration || 0),
+    0,
+  );
+
+  // Calculate total steps from activities + manual step count
+  const totalSteps =
+    activities.reduce((sum, activity) => sum + (activity.count || 0), 0) +
+    steps;
+
+  // Estimate calories burned (5.5 cal per minute is approximate)
+  const calories = Math.round(totalMins * 5.5);
+
+  // Add Workout Function
+
+  // Function to add a new workout/activity
+  const addWorkout = async () => {
+    // Validate that workout name is provided
+    if (!workoutName) return;
+
+    // Reference to today's fitness data
+    const fitnessRef = ref(database, `users/${user.uid}/fitness/${today}`);
+
+    // Create new activity object
+    const newActivity = {
+      type: workoutName,
+      count: parseInt(workoutCount) || 0,
+      duration: parseInt(workoutDuration) || 0,
+      timestamp: new Date().toISOString(),
+    };
+
+    // Add to existing activities array
+    const newActivities = [...activities, newActivity];
+
+    // Update Firebase
+    await update(fitnessRef, { activities: newActivities });
+
+    // Reset form and hide it
+    setShowAddWorkout(false);
+    setWorkoutName("");
+    setWorkoutCount("");
+    setWorkoutDuration("");
+  };
+
+  // Delete Workout Function
+
+  // Function to delete a workout by its array index
+  const deleteWorkout = async (index) => {
+    // Reference to today's fitness data
+    const fitnessRef = ref(database, `users/${user.uid}/fitness/${today}`);
+
+    // Filter out the workout at the given index
+    const newActivities = activities.filter((_, i) => i !== index);
+
+    // Update Firebase
+    await update(fitnessRef, { activities: newActivities });
+  };
+
+  // Get Workout Icon Helper Function
+
+  // Function to determine which emoji icon to show based on workout name
+  const getIcon = (name) => {
+    const lowerName = name.toLowerCase();
+
+    // Match keywords to appropriate icons
+    if (lowerName.includes("run")) return "📈";
+    if (lowerName.includes("walk")) return "👟";
+    if (lowerName.includes("jump")) return "🏃";
+    if (lowerName.includes("squat")) return "🏋️";
+    if (lowerName.includes("yoga")) return "🧘";
+
+    // Default icon for unrecognized workouts
+    return "💪";
+  };
+
+  // Render Fitness UI
+
+  return (
+    <div className="page">
+      {/* PAGE HEADER */}
+      <div className="page-header-bar">
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          {/* Back button */}
+          <button
+            className="back-btn"
+            onClick={() => setActivePage("dashboard")}
+          >
+            ←
+          </button>
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ color: "#22c55e", fontSize: 20 }}>📈</span>
+              <h1 className="page-title-main">Fitness Tracker</h1>
+            </div>
+            <p className="page-subtitle">Track your daily workouts</p>
+          </div>
+        </div>
+        <span className="header-user">{userName}</span>
+      </div>
+
+      {/* STEPS BANNER with gradient background */}
+      <div className="steps-banner">
+        <div>
+          <div className="steps-label">TOTAL STEPS TODAY</div>
+          {/* Display total steps with comma separator for readability */}
+          <div className="steps-value">{totalSteps.toLocaleString()}</div>
+          <div className="steps-sub">
+            {activities.length} of {activities.length} workouts completed
+          </div>
+        </div>
+
+        {/* Decorative shoe icon */}
+        <div className="steps-icon">👟</div>
+      </div>
+
+      {/* WORKOUTS SECTION HEADER */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          margin: "24px 0 16px",
+        }}
+      >
+        <h2 className="section-title-lg">Your Workouts</h2>
+
+        {/* Button to toggle the add workout form */}
+        <button
+          className="add-med-btn"
+          onClick={() => setShowAddWorkout(!showAddWorkout)}
+        >
+          + Create Template
+        </button>
+      </div>
+
+      {/* ADD WORKOUT FORM (conditionally shown) */}
+      {showAddWorkout && (
+        <div className="card-white" style={{ marginBottom: 16 }}>
+          <h3 className="section-title">Add Workout</h3>
+
+          {/* Form row with inputs */}
+          <div className="form-row">
+            <input
+              className="form-input"
+              placeholder="Workout name (e.g. Morning Walk)"
+              value={workoutName}
+              onChange={(e) => setWorkoutName(e.target.value)}
+            />
+            <input
+              className="form-input"
+              type="number"
+              placeholder="Count (steps/reps)"
+              value={workoutCount}
+              onChange={(e) => setWorkoutCount(e.target.value)}
+            />
+            <input
+              className="form-input"
+              type="number"
+              placeholder="Duration (mins)"
+              value={workoutDuration}
+              onChange={(e) => setWorkoutDuration(e.target.value)}
+            />
+            <button className="add-med-btn" onClick={addWorkout}>
+              Add
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* WORKOUTS LIST */}
+      {activities.length === 0 ? (
+        // Empty state if no workouts
+        <div className="empty-state">
+          <div style={{ fontSize: 56 }}>🏃</div>
+          <p>No workouts yet. Add your first workout!</p>
+        </div>
+      ) : (
+        // Grid of workout cards
+        <div className="workout-cards-grid">
+          {activities.map((activity, index) => (
+            <div className="workout-card" key={index}>
+              {/* Workout Card Header */}
+              <div className="workout-card-top">
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  {/* Icon based on workout type */}
+                  <span style={{ fontSize: 22 }}>{getIcon(activity.type)}</span>
+                  <div>
+                    <div className="workout-name">{activity.type}</div>
+                    <div className="editable-tag">Editable</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Workout Stats (Count and Duration) */}
+              <div className="workout-stats">
+                {/* Count stat with blue background */}
+                <div className="workout-stat blue-bg">
+                  <div className="workout-stat-label">COUNT</div>
+                  <div className="workout-stat-value blue">
+                    {activity.count || 0}
+                  </div>
+                </div>
+
+                {/* Duration stat with green background */}
+                <div className="workout-stat green-bg">
+                  <div className="workout-stat-label">DURATION</div>
+                  <div className="workout-stat-value green">
+                    {activity.duration || 0} min
+                  </div>
+                </div>
+              </div>
+
+              {/* Last Updated */}
+              <div className="workout-last-updated">Last updated: Today</div>
+
+              {/* Action Buttons */}
+              <div className="workout-actions">
+                <button className="workout-action-btn flex-1">✏️ Edit</button>
+                <button className="workout-action-btn">🕐 History</button>
+                <button
+                  className="workout-delete-btn"
+                  onClick={() => deleteWorkout(index)}
+                >
+                  🗑️
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* SUMMARY STATISTICS */}
+      <h2 className="section-title-lg" style={{ marginTop: 32 }}>
+        Summary
+      </h2>
+
+      {/* Grid of 4 summary cards */}
+      <div className="summary-grid">
+        {[
+          {
+            icon: "🏋️",
+            value: activities.length,
+            label: "Workouts",
+            color: "#f97316",
+          },
+          {
+            icon: "👟",
+            value: totalSteps.toLocaleString(),
+            label: "Total Steps",
+            color: "#3b82f6",
+          },
+          {
+            icon: "⏱️",
+            value: totalMins,
+            label: "Total Minutes",
+            color: "#22c55e",
+          },
+          { icon: "🔥", value: calories, label: "Calories", color: "#ef4444" },
+        ].map((stat, index) => (
+          <div className="summary-card" key={index}>
+            <div style={{ fontSize: 28, color: stat.color }}>{stat.icon}</div>
+            <div className="summary-value">{stat.value}</div>
+            <div className="summary-label">{stat.label}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
 
   // user - the currently logged-in user (null if not logged in)
