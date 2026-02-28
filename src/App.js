@@ -792,7 +792,6 @@ function Measurements({ user, setActivePage }) {
 // Shows overview of health stats, water intake, charts, and quick action buttons
 
 function Dashboard({ user, medications, setActivePage }) {
-
   // fitness - stores today's fitness data (steps, water, activities)
   const [fitness, setFitness] = useState(null);
 
@@ -1332,7 +1331,6 @@ function Dashboard({ user, medications, setActivePage }) {
     </div>
   );
 }
-
 
 // MEDICATIONS COMPONENT
 // Page for viewing, adding, editing, and marking medications as taken
@@ -2341,7 +2339,6 @@ function Medications({
 // Shows workout cards, summary stats, and step counter
 
 function FitnessPage({ user, setActivePage }) {
-
   // fitness - stores today's fitness data
   const [fitness, setFitness] = useState({
     steps: 0,
@@ -2661,7 +2658,6 @@ function FitnessPage({ user, setActivePage }) {
 // User profile page showing personal info, medical data, and account settings
 
 function HealthProfile({ user, medications, setActivePage, voiceEnabled }) {
-
   // Profile data object containing all user information
   const [profile, setProfile] = useState({
     fullName: "",
@@ -2669,6 +2665,10 @@ function HealthProfile({ user, medications, setActivePage, voiceEnabled }) {
     dob: "",
     emergencyContact: "",
     emergencyContactPhone: "",
+    doctorName: "",
+    doctorPhone: "",
+    surgeryName: "",
+    surgeryPhone: "",
     allergies: "",
     language: "English",
     accessibilityNeeds: "",
@@ -2758,20 +2758,6 @@ function HealthProfile({ user, medications, setActivePage, voiceEnabled }) {
   };
 
   // Load Profile Data Effect
-
-  // Load user profile from Firebase when component mounts
-  useEffect(() => {
-    if (!user) return;
-
-    // Reference to user's profile data
-    const profileRef = ref(database, `users/${user.uid}/profile`);
-
-    // Listen for changes
-    onValue(profileRef, (snapshot) => {
-      // If profile exists, update state
-      if (snapshot.val()) setProfile(snapshot.val());
-    });
-  }, [user]);
 
   // Save Profile Function
 
@@ -3111,7 +3097,6 @@ function HealthProfile({ user, medications, setActivePage, voiceEnabled }) {
 // Page displaying emergency numbers and personal medical contacts
 
 function Emergency({ user, medications, setActivePage, userProfile }) {
-
   // Emergency contacts object (in production, this would come from Firebase)
   const [contacts] = useState({
     gp: { name: "Dr. Smith", phone: "+44 20 1234 5678" },
@@ -3122,6 +3107,13 @@ function Emergency({ user, medications, setActivePage, userProfile }) {
   const emergencyContact = {
     name: userProfile?.emergencyContact || "Not set",
     phone: userProfile?.emergencyContactPhone || "",
+  };
+
+  const doctorContact = {
+    name: userProfile?.doctorName || "Not set",
+    phone: userProfile?.doctorPhone || "",
+    surgery: userProfile?.surgeryName || "",
+    surgeryPhone: userProfile?.surgeryPhone || "",
   };
 
   // User profile data for allergies/medical info
@@ -3226,18 +3218,19 @@ function Emergency({ user, medications, setActivePage, userProfile }) {
               phone: emergencyContact.phone,
               hasPhone: !!emergencyContact.phone,
             },
-
             {
-              type: "GENERAL PRACTITIONER",
+              type: "DOCTOR / GP",
               icon: "🩺",
-              name: contacts.gp.name,
-              phone: contacts.gp.phone,
+              name: doctorContact.name,
+              phone: doctorContact.phone,
+              hasPhone: !!doctorContact.phone,
             },
             {
-              type: "PHARMACY",
-              icon: "💊",
-              name: contacts.pharmacy.name,
-              phone: contacts.pharmacy.phone,
+              type: "SURGERY / CLINIC",
+              icon: "🏥",
+              name: doctorContact.surgery || "Not set",
+              phone: doctorContact.surgeryPhone,
+              hasPhone: !!doctorContact.surgeryPhone,
             },
           ].map((contact, index) => (
             <div className="personal-contact-card" key={index}>
@@ -3708,11 +3701,414 @@ function NotificationManager({ user, medications, reminders }) {
   return null;
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// ONBOARDING COMPONENT
+// Collects essential health information from new users
+// ══════════════════════════════════════════════════════════════════════════════
+
+function Onboarding({ user, onComplete }) {
+  const [step, setStep] = useState(1);
+  const [saving, setSaving] = useState(false);
+
+  // Form state
+  const [formData, setFormData] = useState({
+    // Personal Info
+    fullName: "",
+    phone: "",
+    dob: "",
+
+    // Emergency Contact
+    emergencyContact: "",
+    emergencyContactPhone: "",
+
+    // Doctor/Surgery
+    doctorName: "",
+    doctorPhone: "",
+    surgeryName: "",
+    surgeryPhone: "",
+
+    // Medical Info
+    medications: "",
+    allergies: "",
+
+    // Accessibility
+    accessibilityNeeds: "",
+
+    // Preferences
+    language: "English",
+  });
+
+  const totalSteps = 4;
+
+  // Update form field
+  const updateField = (field, value) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  // Handle form submission
+  const handleSubmit = async () => {
+    setSaving(true);
+
+    try {
+      // Save profile to Firebase
+      const profileRef = ref(database, `users/${user.uid}/profile`);
+      await set(profileRef, {
+        ...formData,
+        onboardingComplete: true,
+        createdAt: new Date().toISOString(),
+      });
+
+      // If user entered medications, save them separately
+      if (formData.medications.trim()) {
+        const medsRef = ref(database, `users/${user.uid}/medications`);
+        const medicationsList = formData.medications
+          .split(",")
+          .map((med) => med.trim())
+          .filter((med) => med);
+
+        for (const medName of medicationsList) {
+          await push(medsRef, {
+            name: medName,
+            dosage: "",
+            frequency: "Once daily",
+            time: "08:00",
+            notes: "",
+            createdAt: new Date().toISOString(),
+          });
+        }
+      }
+
+      onComplete();
+    } catch (error) {
+      console.error("Error saving onboarding data:", error);
+      alert("Failed to save. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Navigation
+  const nextStep = () => {
+    if (step < totalSteps) setStep(step + 1);
+  };
+
+  const prevStep = () => {
+    if (step > 1) setStep(step - 1);
+  };
+
+  // Check if current step is valid
+  const isStepValid = () => {
+    switch (step) {
+      case 1:
+        return formData.fullName.trim() !== "";
+      case 2:
+        return (
+          formData.emergencyContact.trim() !== "" &&
+          formData.emergencyContactPhone.trim() !== ""
+        );
+      case 3:
+        return true; // Medical info is optional
+      case 4:
+        return true; // Accessibility is optional
+      default:
+        return true;
+    }
+  };
+
+  return (
+    <div className="onboarding-page">
+      <div className="onboarding-card">
+        {/* Header */}
+        <div className="onboarding-header">
+          <div className="onboarding-logo">🏥</div>
+          <h1 className="onboarding-title">Welcome to MedFit Health</h1>
+          <p className="onboarding-subtitle">
+            Let's set up your health profile to get you started
+          </p>
+        </div>
+
+        {/* Progress Bar */}
+        <div className="onboarding-progress">
+          <div className="progress-steps">
+            {[1, 2, 3, 4].map((s) => (
+              <div
+                key={s}
+                className={`progress-step ${s === step ? "active" : ""} ${s < step ? "completed" : ""}`}
+              >
+                {s < step ? "✓" : s}
+              </div>
+            ))}
+          </div>
+          <div className="progress-bar-bg">
+            <div
+              className="progress-bar-fill"
+              style={{ width: `${((step - 1) / (totalSteps - 1)) * 100}%` }}
+            ></div>
+          </div>
+          <div className="progress-labels">
+            <span className={step === 1 ? "active" : ""}>Personal</span>
+            <span className={step === 2 ? "active" : ""}>Emergency</span>
+            <span className={step === 3 ? "active" : ""}>Medical</span>
+            <span className={step === 4 ? "active" : ""}>Accessibility</span>
+          </div>
+        </div>
+
+        {/* Step Content */}
+        <div className="onboarding-content">
+          {/* Step 1: Personal Information */}
+          {step === 1 && (
+            <div className="onboarding-step">
+              <h2 className="step-title">👤 Personal Information</h2>
+              <p className="step-description">Tell us a bit about yourself</p>
+
+              <div className="form-field">
+                <label className="form-label">Full Name *</label>
+                <input
+                  className="form-input"
+                  type="text"
+                  placeholder="e.g., John Smith"
+                  value={formData.fullName}
+                  onChange={(e) => updateField("fullName", e.target.value)}
+                />
+              </div>
+
+              <div className="form-field">
+                <label className="form-label">Phone Number</label>
+                <input
+                  className="form-input"
+                  type="tel"
+                  placeholder="e.g., +44 7700 900000"
+                  value={formData.phone}
+                  onChange={(e) => updateField("phone", e.target.value)}
+                />
+              </div>
+
+              <div className="form-field">
+                <label className="form-label">Date of Birth</label>
+                <input
+                  className="form-input"
+                  type="date"
+                  value={formData.dob}
+                  onChange={(e) => updateField("dob", e.target.value)}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Step 2: Emergency Contact */}
+          {step === 2 && (
+            <div className="onboarding-step">
+              <h2 className="step-title">🆘 Emergency Contact</h2>
+              <p className="step-description">
+                Who should we contact in case of an emergency?
+              </p>
+
+              <div className="form-field">
+                <label className="form-label">Emergency Contact Name *</label>
+                <input
+                  className="form-input"
+                  type="text"
+                  placeholder="e.g., Jane Smith (Mother)"
+                  value={formData.emergencyContact}
+                  onChange={(e) =>
+                    updateField("emergencyContact", e.target.value)
+                  }
+                />
+              </div>
+
+              <div className="form-field">
+                <label className="form-label">Emergency Contact Phone *</label>
+                <input
+                  className="form-input"
+                  type="tel"
+                  placeholder="e.g., +44 7700 900001"
+                  value={formData.emergencyContactPhone}
+                  onChange={(e) =>
+                    updateField("emergencyContactPhone", e.target.value)
+                  }
+                />
+              </div>
+
+              <div className="form-divider"></div>
+
+              <h3 className="subsection-title">🩺 Doctor / Surgery Details</h3>
+
+              <div className="form-row">
+                <div className="form-field">
+                  <label className="form-label">Doctor's Name</label>
+                  <input
+                    className="form-input"
+                    type="text"
+                    placeholder="e.g., Dr. Sarah Johnson"
+                    value={formData.doctorName}
+                    onChange={(e) => updateField("doctorName", e.target.value)}
+                  />
+                </div>
+
+                <div className="form-field">
+                  <label className="form-label">Doctor's Phone</label>
+                  <input
+                    className="form-input"
+                    type="tel"
+                    placeholder="e.g., +44 20 1234 5678"
+                    value={formData.doctorPhone}
+                    onChange={(e) => updateField("doctorPhone", e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="form-field">
+                  <label className="form-label">Surgery/Clinic Name</label>
+                  <input
+                    className="form-input"
+                    type="text"
+                    placeholder="e.g., City Health Centre"
+                    value={formData.surgeryName}
+                    onChange={(e) => updateField("surgeryName", e.target.value)}
+                  />
+                </div>
+
+                <div className="form-field">
+                  <label className="form-label">Surgery Phone</label>
+                  <input
+                    className="form-input"
+                    type="tel"
+                    placeholder="e.g., +44 20 8765 4321"
+                    value={formData.surgeryPhone}
+                    onChange={(e) =>
+                      updateField("surgeryPhone", e.target.value)
+                    }
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Step 3: Medical Information */}
+          {step === 3 && (
+            <div className="onboarding-step">
+              <h2 className="step-title">💊 Medical Information</h2>
+              <p className="step-description">
+                Help us understand your health needs (you can update this later)
+              </p>
+
+              <div className="form-field">
+                <label className="form-label">Current Medications</label>
+                <textarea
+                  className="form-input form-textarea"
+                  placeholder="List your medications separated by commas&#10;e.g., Aspirin, Metformin, Lisinopril"
+                  value={formData.medications}
+                  onChange={(e) => updateField("medications", e.target.value)}
+                  rows={4}
+                />
+                <p className="form-hint">
+                  💡 These will be added to your medication tracker
+                </p>
+              </div>
+
+              <div className="form-field">
+                <label className="form-label">Allergies</label>
+                <textarea
+                  className="form-input form-textarea"
+                  placeholder="List any allergies&#10;e.g., Penicillin, Peanuts, Latex"
+                  value={formData.allergies}
+                  onChange={(e) => updateField("allergies", e.target.value)}
+                  rows={3}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Step 4: Accessibility */}
+          {step === 4 && (
+            <div className="onboarding-step">
+              <h2 className="step-title">♿ Accessibility & Preferences</h2>
+              <p className="step-description">
+                Let us know how we can make the app work better for you
+              </p>
+
+              <div className="form-field">
+                <label className="form-label">Accessibility Needs</label>
+                <textarea
+                  className="form-input form-textarea"
+                  placeholder="Describe any accessibility requirements&#10;e.g., Large text, screen reader, high contrast, voice assistance"
+                  value={formData.accessibilityNeeds}
+                  onChange={(e) =>
+                    updateField("accessibilityNeeds", e.target.value)
+                  }
+                  rows={3}
+                />
+              </div>
+
+              <div className="form-field">
+                <label className="form-label">Preferred Language</label>
+                <select
+                  className="form-input"
+                  value={formData.language}
+                  onChange={(e) => updateField("language", e.target.value)}
+                >
+                  <option value="English">English</option>
+                  <option value="Spanish">Spanish</option>
+                  <option value="French">French</option>
+                  <option value="German">German</option>
+                  <option value="Urdu">Urdu</option>
+                  <option value="Arabic">Arabic</option>
+                  <option value="Chinese">Chinese</option>
+                  <option value="Hindi">Hindi</option>
+                </select>
+              </div>
+
+              <div className="onboarding-summary">
+                <h3>✅ You're all set!</h3>
+                <p>
+                  Click "Complete Setup" to start using MedFit Health. You can
+                  always update this information later in your Health Profile.
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer Navigation */}
+        <div className="onboarding-footer">
+          {step > 1 && (
+            <button className="onboarding-btn secondary" onClick={prevStep}>
+              ← Back
+            </button>
+          )}
+
+          <div className="step-indicator">
+            Step {step} of {totalSteps}
+          </div>
+
+          {step < totalSteps ? (
+            <button
+              className="onboarding-btn primary"
+              onClick={nextStep}
+              disabled={!isStepValid()}
+            >
+              Next →
+            </button>
+          ) : (
+            <button
+              className="onboarding-btn primary"
+              onClick={handleSubmit}
+              disabled={saving}
+            >
+              {saving ? "Saving..." : "Complete Setup ✓"}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // MAIN APP COMPONENT
 // Root component that manages authentication and routing between pages
 
 export default function App() {
-
   // user - the currently logged-in user (null if not logged in)
   const [user, setUser] = useState(null);
 
@@ -3726,6 +4122,10 @@ export default function App() {
 
   // User profile data (for emergency contact)
   const [userProfile, setUserProfile] = useState({});
+
+  // Onboarding state - tracks if new user needs to complete setup
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [checkingOnboarding, setCheckingOnboarding] = useState(true);
 
   // activePage - which page to show (dashboard, medications, fitness, etc.)
   const [activePage, setActivePage] = useState("dashboard");
@@ -3758,6 +4158,32 @@ export default function App() {
     // Cleanup function - stops listening when component unmounts
     return () => unsubscribe();
   }, []); // Empty dependency array = run once on mount
+
+  // Load user profile from Firebase when component mounts
+  useEffect(() => {
+    if (!user) {
+      setUserProfile({});
+      setShowOnboarding(false);
+      setCheckingOnboarding(false);
+      return;
+    }
+
+    // Reference to user's profile data
+    const profileRef = ref(database, `users/${user.uid}/profile`);
+
+    // Listen for changes
+    onValue(profileRef, (snapshot) => {
+      // If profile exists, update state
+      if (snapshot.val()) {
+        setUserProfile(snapshot.val());
+        setShowOnboarding(!snapshot.val().onboardingComplete);
+      } else {
+        setUserProfile({});
+        setShowOnboarding(true);
+      }
+      setCheckingOnboarding(false);
+    });
+  }, [user]);
 
   // Load Medications Effect
 
@@ -3840,7 +4266,7 @@ export default function App() {
   // Loading State
 
   // While checking authentication, show loading message
-  if (loading) {
+  if (loading || checkingOnboarding) {
     return (
       <div
         style={{
@@ -3862,6 +4288,15 @@ export default function App() {
   // If no user is logged in, show the login/signup page
   if (!user) {
     return <Auth user={user} setUser={setUser} />;
+  }
+
+  // ─── Onboarding State ───────────────────────────────────────────────────────
+
+  // If new user needs to complete onboarding
+  if (showOnboarding) {
+    return (
+      <Onboarding user={user} onComplete={() => setShowOnboarding(false)} />
+    );
   }
 
   // define pages object

@@ -3797,6 +3797,285 @@ body {
   pointer-events: none;
 }
 
+/* ══════════════════════════════════════════════════════════════════════════════
+   ONBOARDING COMPONENT STYLES
+   Multi-step form for new user setup
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+.onboarding-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #f8fafc, #e2e8f0);
+  padding: 20px;
+}
+
+.onboarding-card {
+  background: white;
+  border-radius: 20px;
+  width: 100%;
+  max-width: 600px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+/* Header */
+.onboarding-header {
+  text-align: center;
+  padding: 32px 32px 24px;
+  background: var(--color-primary, #2563eb);
+  color: white;
+}
+
+.onboarding-logo {
+  font-size: 48px;
+  margin-bottom: 12px;
+}
+
+.onboarding-title {
+  font-size: 24px;
+  font-weight: 800;
+  margin-bottom: 8px;
+}
+
+.onboarding-subtitle {
+  font-size: 14px;
+  opacity: 0.9;
+}
+
+/* Progress Bar */
+.onboarding-progress {
+  padding: 24px 32px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.progress-steps {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  position: relative;
+}
+
+.progress-step {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #e2e8f0;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 14px;
+  position: relative;
+  z-index: 1;
+  transition: all 0.3s;
+}
+
+.progress-step.active {
+  background: var(--color-primary, #2563eb);
+  color: white;
+  transform: scale(1.1);
+}
+
+.progress-step.completed {
+  background: var(--color-success, #0d9488);
+  color: white;
+}
+
+.onboarding-progress .progress-bar-bg {
+  height: 4px;
+  margin-top: -20px;
+  margin-bottom: 16px;
+  margin-left: 18px;
+  margin-right: 18px;
+  position: relative;
+  z-index: 0;
+}
+
+.onboarding-progress .progress-bar-fill {
+  background: var(--color-success, #0d9488);
+  transition: width 0.3s ease;
+}
+
+.progress-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.progress-labels span.active {
+  color: var(--color-primary, #2563eb);
+  font-weight: 700;
+}
+
+/* Content */
+.onboarding-content {
+  padding: 24px 32px;
+  min-height: 350px;
+}
+
+.onboarding-step {
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.step-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 8px;
+}
+
+.step-description {
+  font-size: 14px;
+  color: #64748b;
+  margin-bottom: 24px;
+}
+
+.subsection-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #0f172a;
+  margin-bottom: 16px;
+  margin-top: 8px;
+}
+
+.form-field {
+  margin-bottom: 18px;
+}
+
+.form-hint {
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 6px;
+}
+
+.form-divider {
+  height: 1px;
+  background: #e2e8f0;
+  margin: 24px 0;
+}
+
+/* Summary */
+.onboarding-summary {
+  background: var(--color-success-light, #ccfbf1);
+  border: 2px solid var(--color-success, #0d9488);
+  border-radius: 12px;
+  padding: 20px;
+  text-align: center;
+  margin-top: 24px;
+}
+
+.onboarding-summary h3 {
+  color: var(--color-success-text, #115e59);
+  font-size: 18px;
+  margin-bottom: 8px;
+}
+
+.onboarding-summary p {
+  color: #64748b;
+  font-size: 14px;
+}
+
+/* Footer */
+.onboarding-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 32px;
+  border-top: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+.step-indicator {
+  font-size: 13px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.onboarding-btn {
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 2px solid transparent;
+}
+
+.onboarding-btn.primary {
+  background: var(--color-primary, #2563eb);
+  color: white;
+  border-color: var(--color-primary, #2563eb);
+}
+
+.onboarding-btn.primary:hover:not(:disabled) {
+  background: var(--color-primary-hover, #1d4ed8);
+  border-color: var(--color-primary-hover, #1d4ed8);
+}
+
+.onboarding-btn.primary:disabled {
+  background: #94a3b8;
+  border-color: #94a3b8;
+  cursor: not-allowed;
+}
+
+.onboarding-btn.secondary {
+  background: white;
+  color: #475569;
+  border-color: #e2e8f0;
+}
+
+.onboarding-btn.secondary:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+  .onboarding-card {
+    border-radius: 0;
+    max-width: 100%;
+  }
+
+  .onboarding-header,
+  .onboarding-content,
+  .onboarding-footer,
+  .onboarding-progress {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+
+  .progress-labels {
+    font-size: 9px;
+  }
+
+  .progress-step {
+    width: 32px;
+    height: 32px;
+    font-size: 12px;
+  }
+
+  .form-row {
+    flex-direction: column;
+  }
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    HOW THE TOOLTIP WORKS:
    
