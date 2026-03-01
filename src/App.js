@@ -834,22 +834,73 @@ function Dashboard({ user, medications, setActivePage }) {
   // Calculate REAL medication adherence statistics
 
   // Get today's date
-  const today = new Date().toISOString().split("T")[0];
+  const today = new Date().toDateString();
+
+  // Calculate taken and pending counts properly
+  let totalDosesToday = 0;
+  let dosesTakenToday = 0;
+
+  medications.forEach((med) => {
+    const freq = (med.frequency || "").toLowerCase();
+
+    let dosesPerDay = 1;
+
+    let doseSlots = ["single"];
+
+    if (freq.includes("three times")) {
+      dosesPerDay = 3;
+      doseSlots = ["morning", "afternoon", "evening"];
+    } else if (freq.includes("twice")) {
+      dosesPerDay = 2;
+      doseSlots = ["morning", "evening"];
+    } else if (freq.includes("as needed")) {
+      dosesPerDay = 0;
+      doseSlots = [];
+    } else {
+      dosesPerDay = 1;
+      doseSlots = ["single"];
+    }
+
+    // Add this medication's doses to the total expected for today
+    totalDosesToday += dosesPerDay;
+
+    // Count how many doses of this medication were taken today
+    // Check each dose slot for this medication
+    doseSlots.forEach((slot) => {
+      // Create the key used in takenMeds (e.g. "abc123_morning")
+      const doseKey = `${med.id}_${slot}`;
+
+      if (takenMeds[doseKey] === true) {
+        dosesTakenToday += 1;
+      }
+    });
+  });
+
+  // Formula: (doses taken / total doses) * 100
+  // Math.min(100, ...) caps the percentage at 100% maximum
+  // This prevents the percentage from going over 100% due to any data issues
+  const takenPercentage =
+    totalDosesToday > 0
+      ? Math.min(100, Math.round((dosesTakenToday / totalDosesToday) * 100))
+      : 0;
 
   // Count how many medications have been marked as taken
-  const takenCount = Object.values(takenMeds).filter(Boolean).length;
+  const takenCount = dosesTakenToday;
 
   // Total number of medications
   const totalMeds = medications.length;
 
   // Count pending (not taken yet)
-  const pendingCount = totalMeds - takenCount;
+  const pendingCount = Math.max(0, totalDosesToday - dosesTakenToday);
+
+  const pendingPercentage =
+    totalDosesToday > 0 ? Math.max(0, 100 - takenPercentage) : 100;
 
   // Calculate percentages for the donut chart
   // If no medications, show 0% taken
-  const takenPercentage = totalMeds > 0 ? (takenCount / totalMeds) * 100 : 0;
+  /*const takenPercentage = totalMeds > 0 ? (takenCount / totalMeds) * 100 : 0;
   const pendingPercentage =
-    totalMeds > 0 ? (pendingCount / totalMeds) * 100 : 100;
+    totalMeds > 0 ? (pendingCount / totalMeds) * 100 : 100; */
 
   // Load Fitness Data Effect
 
@@ -2338,7 +2389,7 @@ function Medications({
 // Page for tracking workouts and viewing fitness statistics
 // Shows workout cards, summary stats, and step counter
 
-function FitnessPage({ user, setActivePage }) {
+function FitnessPage({ user, setActivePage, voiceEnabled }) {
   // fitness - stores today's fitness data
   const [fitness, setFitness] = useState({
     steps: 0,
