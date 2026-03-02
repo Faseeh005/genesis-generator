@@ -2397,8 +2397,17 @@ function FitnessPage({ user, setActivePage, voiceEnabled }) {
     activities: [],
   });
 
-  // Controls whether the "Add Workout" form is visible
+  // Controls whether the "Add Workout" form is visible for custom workouts
   const [showAddWorkout, setShowAddWorkout] = useState(false);
+
+  // Controls whether the exercise template modal is visible
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
+
+  // Currently selected exercise category (e.g., "chair", "bed")
+  const [selectedCategory, setSelectedCategory] = useState(null);
+
+  // Currently selected exercise for viewing details before logging
+  const [selectedExercise, setSelectedExercise] = useState(null);
 
   // Form fields for adding a new workout
   const [workoutName, setWorkoutName] = useState("");
@@ -2410,6 +2419,268 @@ function FitnessPage({ user, setActivePage, voiceEnabled }) {
 
   // Get username for display
   const userName = user.email.split("@")[0];
+
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // EXERCISE TEMPLATES DATA
+  // Accessibility-focused exercises organized by category
+  // ═══════════════════════════════════════════════════════════════════════════════
+
+  const exerciseCategories = [
+    {
+      // ─── CHAIR EXERCISES ───
+      // For users who sit most of the day or have limited mobility
+      id: "chair",
+      name: "Chair Exercises",
+      icon: "🪑",
+      description: "For users who sit most of the day or have limited mobility",
+      color: "#dbeafe",
+      exercises: [
+        {
+          id: "seated-arm-raises",
+          name: "Seated Arm Raises",
+          duration: "1–2 minutes",
+          durationMins: 2,
+          benefits: "Shoulder mobility, circulation",
+          instructions:
+            "Sit comfortably. Slowly raise both arms forward or overhead. Lower them gently. Repeat at your own pace.",
+          accessibilityNotes: [
+            "One arm option available",
+            "No weights required",
+          ],
+          icon: "🙆",
+        },
+        {
+          id: "seated-leg-lifts",
+          name: "Seated Leg Lifts",
+          duration: "1–2 minutes",
+          durationMins: 2,
+          benefits: "Leg strength, blood flow",
+          instructions:
+            "While seated, lift one foot slightly off the floor. Hold for a moment, then lower. Switch legs.",
+          accessibilityNotes: [
+            "Can be done one leg at a time",
+            "Adjust height to comfort",
+          ],
+          icon: "🦵",
+        },
+        {
+          id: "seated-torso-twist",
+          name: "Seated Torso Twist",
+          duration: "1 minute",
+          durationMins: 1,
+          benefits: "Spine mobility",
+          instructions:
+            "Sit tall. Gently turn your upper body to one side. Return to center. Switch sides.",
+          accessibilityNotes: [
+            "Keep movements slow and controlled",
+            "Stop if any discomfort",
+          ],
+          icon: "🔄",
+        },
+        {
+          id: "chair-marching",
+          name: "Chair Marching",
+          duration: "2 minutes",
+          durationMins: 2,
+          benefits: "Light cardio, circulation",
+          instructions:
+            "While seated, lift one knee at a time as if marching slowly.",
+          accessibilityNotes: [
+            "Adjust pace to comfort",
+            "Hold armrests for support",
+          ],
+          icon: "🚶",
+        },
+      ],
+    },
+    {
+      // ─── BED EXERCISES ───
+      // Perfect for mornings, evenings, or fatigue days
+      id: "bed",
+      name: "Bed Exercises",
+      icon: "🛏️",
+      description: "Perfect for mornings, evenings, or fatigue days",
+      color: "#fae8ff",
+      exercises: [
+        {
+          id: "ankle-pumps",
+          name: "Ankle Pumps",
+          duration: "1 minute",
+          durationMins: 1,
+          benefits: "Circulation, swelling prevention",
+          instructions: "While lying down, gently flex your feet up and down.",
+          accessibilityNotes: [
+            "Great for preventing blood clots",
+            "Can be done any time",
+          ],
+          icon: "🦶",
+        },
+        {
+          id: "knee-bends",
+          name: "Knee Bends",
+          duration: "2 minutes",
+          durationMins: 2,
+          benefits: "Joint mobility",
+          instructions:
+            "Slide one heel toward your body, bending the knee. Slide it back. Switch legs.",
+          accessibilityNotes: ["Move slowly", "Keep back flat on bed"],
+          icon: "🦿",
+        },
+        {
+          id: "arm-stretch-lying",
+          name: "Arm Stretch (Lying Down)",
+          duration: "1 minute",
+          durationMins: 1,
+          benefits: "Shoulder comfort",
+          instructions:
+            "Raise one arm toward the ceiling and gently stretch. Switch arms.",
+          accessibilityNotes: ["One arm at a time", "No need to fully extend"],
+          icon: "💪",
+        },
+      ],
+    },
+    {
+      // ─── LIGHT STANDING EXERCISES ───
+      // For users who can stand with or without support
+      id: "standing",
+      name: "Light Standing Exercises",
+      icon: "🚶",
+      description: "For users who can stand with or without support",
+      color: "#dcfce7",
+      exercises: [
+        {
+          id: "marching-in-place",
+          name: "Marching in Place",
+          duration: "2–3 minutes",
+          durationMins: 3,
+          benefits: "Cardio, balance",
+          instructions:
+            "Stand tall and gently lift one knee at a time. Hold onto a chair if needed.",
+          accessibilityNotes: [
+            "Use chair for support",
+            "Adjust pace as needed",
+          ],
+          icon: "🏃",
+        },
+        {
+          id: "calf-raises",
+          name: "Calf Raises",
+          duration: "1–2 minutes",
+          durationMins: 2,
+          benefits: "Lower-leg strength",
+          instructions:
+            "Hold onto something sturdy. Slowly rise onto your toes, then lower.",
+          accessibilityNotes: [
+            "Always hold support",
+            "Small movements are fine",
+          ],
+          icon: "🦶",
+        },
+        {
+          id: "side-leg-raises",
+          name: "Side Leg Raises",
+          duration: "2 minutes",
+          durationMins: 2,
+          benefits: "Hip strength, balance",
+          instructions:
+            "Stand holding support. Lift one leg slightly to the side. Lower and switch.",
+          accessibilityNotes: [
+            "Hold chair or wall",
+            "Small lifts are effective",
+          ],
+          icon: "🦵",
+        },
+      ],
+    },
+    {
+      // ─── BALANCE & STABILITY ───
+      // Fall-prevention focused exercises
+      id: "balance",
+      name: "Balance & Stability",
+      icon: "🧍",
+      description: "Fall-prevention focused exercises",
+      color: "#fef3c7",
+      exercises: [
+        {
+          id: "single-leg-balance",
+          name: "Single-Leg Balance (Supported)",
+          duration: "30–60 seconds per side",
+          durationMins: 2,
+          benefits: "Balance confidence",
+          instructions:
+            "Hold a chair. Lift one foot slightly off the ground. Switch.",
+          accessibilityNotes: ["Always use support", "Even small lifts help"],
+          icon: "🦩",
+        },
+        {
+          id: "heel-to-toe-stand",
+          name: "Heel-to-Toe Stand",
+          duration: "1 minute",
+          durationMins: 1,
+          benefits: "Stability",
+          instructions:
+            "Place one foot directly in front of the other. Hold. Switch feet.",
+          accessibilityNotes: [
+            "Stand near wall for safety",
+            "Focus on a fixed point",
+          ],
+          icon: "👣",
+        },
+      ],
+    },
+    {
+      // ─── STRETCHING & RELAXATION ───
+      // Great after medication reminders or before sleep
+      id: "stretching",
+      name: "Stretching & Relaxation",
+      icon: "🧘",
+      description: "Great after medication reminders or before sleep",
+      color: "#e0e7ff",
+      exercises: [
+        {
+          id: "neck-stretch",
+          name: "Neck Stretch",
+          duration: "1 minute",
+          durationMins: 1,
+          benefits: "Tension relief",
+          instructions:
+            "Gently tilt your head to one side. Hold briefly. Switch.",
+          accessibilityNotes: [
+            "Very gentle movements",
+            "Never force the stretch",
+          ],
+          icon: "🙆",
+        },
+        {
+          id: "shoulder-rolls",
+          name: "Shoulder Rolls",
+          duration: "1 minute",
+          durationMins: 1,
+          benefits: "Upper-body relaxation",
+          instructions: "Slowly roll your shoulders forward, then backward.",
+          accessibilityNotes: [
+            "Can be done seated or standing",
+            "Great for desk breaks",
+          ],
+          icon: "🔄",
+        },
+        {
+          id: "guided-breathing",
+          name: "Guided Breathing",
+          duration: "2 minutes",
+          durationMins: 2,
+          benefits: "Stress reduction",
+          instructions:
+            "Breathe in slowly through your nose. Breathe out gently through your mouth.",
+          accessibilityNotes: [
+            "Can be done anywhere",
+            "Focus on slow, steady breaths",
+          ],
+          icon: "🌬️",
+        },
+      ],
+    },
+  ];
 
   // Load Fitness Data Effect
 
