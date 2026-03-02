@@ -16,6 +16,9 @@ import {
 } from "firebase/database";
 import { onAuthStateChanged, signOut, deleteUser } from "firebase/auth";
 
+// Gives access to Apple Health data on iOS devices
+import { useHealthKit } from "./useHealthKit";
+
 // Our custom components
 import Auth from "./Auth"; // Login/signup page
 import Chat from "./Chat"; // AI chat assistant
@@ -802,6 +805,21 @@ function Dashboard({ user, medications, setActivePage }) {
   // Hover state for donut chart tooltip
   const [hoveredSegment, setHoveredSegment] = useState(null); // 'taken', 'pending', or null
 
+  // Healthkit Integration connects to Apple HealthKit on iOS devices.
+  // On localhost it returns default values and isAvailable = false.
+
+  const {
+    isAvailable: healthKitAvailable, // Is HealthKit available? (iOS only)
+    isAuthorized: healthKitAuthorized, // Has user granted permission?
+    isLoading: healthKitLoading, // Is data being fetched?
+
+    healthData, // Today's health metrics
+    weeklySteps, // Past 7 days of steps
+
+    requestAuthorization: requestHealthKitAuth, // Function to request permission
+    refreshHealthData, // Function to refresh data
+  } = useHealthKit();
+
   // Date & Time Formatting
 
   const now = new Date();
@@ -819,7 +837,9 @@ function Dashboard({ user, medications, setActivePage }) {
   // User Data Calculations
 
   const userName = user.email.split("@")[0];
-  const steps = fitness?.steps || 0;
+  const steps = healthData.isFromHealthKit
+    ? healthData.steps
+    : fitness?.steps || 0;
   const water = fitness?.water || 0;
   const waterMl = water * 250;
   const waterGoal = 2000;
@@ -829,7 +849,21 @@ function Dashboard({ user, medications, setActivePage }) {
     (sum, activity) => sum + (activity.duration || 0),
     0,
   );
-  const calories = Math.round(totalMins * 5.5);
+  // Get calories from healthKit
+  const healthKitCalories = healthData.isFromHealthKit
+    ? healthData.calories
+    : 0;
+
+  // Weekly steps for the bar chart
+  const weekDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+  const chartSteps =
+    healthData.isFromHealthKit && weeklySteps.length > 0
+      ? weeklySteps.map((day) => day.steps) // Extract steps from each day object
+      : [0, 0, 0, 0, 0, 0, steps || 0];
+
+  // Find the maximum steps for scaling the chart bars
+  const maxSteps = Math.max(...chartSteps, 1);
 
   // Calculate REAL medication adherence statistics
 
@@ -1040,12 +1074,6 @@ function Dashboard({ user, medications, setActivePage }) {
 
   const nextMed = getNextMedication();
 
-  // Mock Data for Weekly Steps Chart
-
-  const weekDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-  const mockSteps = [0, 0, 0, 0, 0, 0, steps || 0];
-  const maxSteps = Math.max(...mockSteps, 1);
-
   //Calculate donut chart values
 
   // SVG circle circumference calculation
@@ -1095,6 +1123,111 @@ function Dashboard({ user, medications, setActivePage }) {
           <p>Here's your health overview for today</p>
         </div>
       </div>
+
+      {/* This banner appears when:
+      The app is running on iOS (healthKitAvailable = true)
+      The user hasn't connected Apple Health yet (healthKitAuthorized = false)
+    
+      It prompts the user to connect their Apple Health data */}
+      {healthKitAvailable && !healthKitAuthorized && (
+        <div
+          style={{
+            // Gradient background from pink to purple
+            background: "linear-gradient(135deg, #ec4899, #8b5cf6)",
+            borderRadius: 14,
+            padding: "20px 24px",
+            marginBottom: 24,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            color: "white",
+            flexWrap: "wrap", // Allow wrapping on small screens
+            gap: 16,
+          }}
+        >
+          {/* Left side: Icon and text */}
+          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+            <span style={{ fontSize: 32 }}>❤️</span>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>
+                Connect Apple Health
+              </div>
+              <div style={{ fontSize: 13, opacity: 0.9 }}>
+                Sync your steps, calories, and heart rate automatically
+              </div>
+            </div>
+          </div>
+
+          {/* Right side: Connect button */}
+          <button
+            onClick={requestHealthKitAuth} // Call the authorization function
+            disabled={healthKitLoading} // Disable while loading
+            style={{
+              background: "white",
+              color: "#8b5cf6",
+              border: "none",
+              borderRadius: 8,
+              padding: "10px 20px",
+              fontWeight: 600,
+              cursor: healthKitLoading ? "not-allowed" : "pointer",
+              opacity: healthKitLoading ? 0.7 : 1,
+            }}
+          >
+            {healthKitLoading ? "Connecting..." : "Connect"}
+          </button>
+        </div>
+      )}
+
+      {/*    
+    This banner appears when:
+    Apple Health is successfully connected (healthKitAuthorized = true)
+    It shows the user that their data is syncing and provides a refresh button */}
+      {healthKitAuthorized && (
+        <div
+          style={{
+            background: "#f0fdf4", // Light green background
+            border: "2px solid #22c55e", // Green border
+            borderRadius: 10,
+            padding: "12px 16px",
+            marginBottom: 16,
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          {/* Checkmark icon */}
+          <span style={{ fontSize: 20 }}>✅</span>
+
+          {/* Status text */}
+          <div style={{ flex: 1 }}>
+            <span style={{ fontWeight: 600, color: "#166534" }}>
+              Apple Health Connected
+            </span>
+            <span style={{ color: "#64748b", marginLeft: 8, fontSize: 13 }}>
+              Steps & calories syncing automatically
+            </span>
+          </div>
+
+          {/* Refresh button */}
+          <button
+            onClick={refreshHealthData} // Manually refresh data
+            disabled={healthKitLoading} // Disable while loading
+            style={{
+              background: "#22c55e",
+              color: "white",
+              border: "none",
+              borderRadius: 6,
+              padding: "6px 12px",
+              fontSize: 12,
+              cursor: healthKitLoading ? "not-allowed" : "pointer",
+              opacity: healthKitLoading ? 0.7 : 1,
+            }}
+          >
+            {healthKitLoading ? "..." : "🔄 Refresh"}
+          </button>
+        </div>
+      )}
 
       {/* NEXT MEDICATION TIMER */}
       {medications.length > 0 && nextMed && (
@@ -1148,7 +1281,9 @@ function Dashboard({ user, medications, setActivePage }) {
             icon: "👟",
             label: "Steps Today",
             value: steps.toLocaleString() || "8,542",
-            sub: "Goal: 10,000",
+            sub: healthData.isFromHealthKit
+              ? "From Apple Health" // If using HealthKit data
+              : "Goal: 10,000", // If using manual/Firebase data
             color: "#f0fdf4",
           },
           {
@@ -1207,14 +1342,30 @@ function Dashboard({ user, medications, setActivePage }) {
       <div className="charts-row">
         {/* WEEKLY STEPS BAR CHART */}
         <div className="card-white chart-card">
-          <h3 className="section-title">Weekly Steps</h3>
+          <h3 className="section-title">
+            Weekly Steps
+            {/* Show indicator if data is from Apple Health */}
+            {healthData.isFromHealthKit && (
+              <span
+                style={{
+                  fontSize: 11,
+                  color: "#22c55e", // Green color
+                  marginLeft: 8,
+                  fontWeight: 500,
+                }}
+              >
+                ● Apple Health
+              </span>
+            )}{" "}
+          </h3>
 
           <div className="bar-chart">
-            {mockSteps.map((stepCount, index) => (
+            {chartSteps.map((stepCount, index) => (
               <div className="bar-col" key={index}>
                 <div
                   className="bar-fill"
                   style={{ height: `${(stepCount / maxSteps) * 140}px` }}
+                  title={`${stepCount.toLocaleString()} steps`}
                 ></div>
                 <div className="bar-label">{weekDays[index]}</div>
               </div>
