@@ -4729,6 +4729,10 @@ function NotificationManager({ user, medications, reminders }) {
 function Onboarding({ user, onComplete }) {
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
+  // Controls medication modal visibility
+  const [showMedModal, setShowMedModal] = useState(false);
+  // Index of medication being edited (-1 for new medication)
+  const [editingMedIndex, setEditingMedIndex] = useState(-1);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -4758,11 +4762,177 @@ function Onboarding({ user, onComplete }) {
     language: "English",
   });
 
+  // These fields are used for the medication add/edit modal
+  // They mirror the fields in the Medications page
+
+  const [medName, setMedName] = useState(""); // Medication name)
+  const [medDosage, setMedDosage] = useState(""); // Dosage
+  const [medFreq, setMedFreq] = useState("Once daily"); // How often to take it
+  const [medTimeSlot, setMedTimeSlot] = useState("Morning"); // Time of day
+  const [medTime, setMedTime] = useState("08:00"); // Specific time
+  const [medNotes, setMedNotes] = useState(""); // Additional instructions
+
+  // For medications with multiple doses per day
+  const [medMorningTime, setMedMorningTime] = useState("08:00");
+  const [medAfternoonTime, setMedAfternoonTime] = useState("14:00");
+  const [medEveningTime, setMedEveningTime] = useState("18:00");
+
   const totalSteps = 4;
 
-  // Update form field
+  // HELPER FUNCTIONS
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * updateField
+   *
+   * Updates a single field in the formData state.
+   * Uses the spread operator to keep all other fields unchanged.
+   *
+   * @param {string} field - The field name to update
+   * @param {any} value - The new value for the field
+   */
   const updateField = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  /**
+   * resetMedForm
+   *
+   * Resets all medication form fields to their default values.
+   * Called after adding/editing a medication or closing the modal.
+   */
+  const resetMedForm = () => {
+    setMedName("");
+    setMedDosage("");
+    setMedFreq("Once daily");
+    setMedTimeSlot("Morning");
+    setMedTime("08:00");
+    setMedNotes("");
+    setMedMorningTime("08:00");
+    setMedAfternoonTime("14:00");
+    setMedEveningTime("18:00");
+    setEditingMedIndex(-1);
+  };
+
+  /**
+   * openAddMedModal
+   *
+   * Opens the medication modal in "add" mode.
+   * Resets the form to default values.
+   */
+  const openAddMedModal = () => {
+    resetMedForm();
+    setShowMedModal(true);
+  };
+
+  /**
+   * openEditMedModal
+   *
+   * Opens the medication modal in "edit" mode.
+   * Populates the form with the existing medication's data.
+   *
+   * @param {number} index - The index of the medication in the array
+   */
+  const openEditMedModal = (index) => {
+    const med = formData.medications[index];
+
+    // Populate form fields with existing medication data
+    setMedName(med.name || "");
+    setMedDosage(med.dosage || "");
+    setMedFreq(med.frequency || "Once daily");
+    setMedTimeSlot(med.timeSlot || "Morning");
+    setMedTime(med.time || "08:00");
+    setMedNotes(med.notes || "");
+    setMedMorningTime(med.morningTime || "08:00");
+    setMedAfternoonTime(med.afternoonTime || "14:00");
+    setMedEveningTime(med.eveningTime || "18:00");
+
+    setEditingMedIndex(index);
+    setShowMedModal(true);
+  };
+
+  /**
+   * closeMedModal
+   *
+   * Closes the medication modal and resets the form.
+   */
+  const closeMedModal = () => {
+    setShowMedModal(false);
+    resetMedForm();
+  };
+
+  /**
+   * saveMedication
+   *
+   * Saves the medication from the form to the medications array.
+   * If editing, updates the existing medication.
+   * If adding, appends to the array.
+   */
+  const saveMedication = () => {
+    // Validate required fields
+    if (!medName.trim() || !medDosage.trim()) {
+      alert("Please enter medication name and dosage.");
+      return;
+    }
+
+    // Create the medication object
+    const newMed = {
+      name: medName.trim(),
+      dosage: medDosage.trim(),
+      frequency: medFreq,
+      timeSlot: medTimeSlot,
+      time: medTime,
+      notes: medNotes.trim(),
+      // Store times for multi-dose medications
+      morningTime: medMorningTime,
+      afternoonTime: medAfternoonTime,
+      eveningTime: medEveningTime,
+    };
+
+    // Update the medications array
+    const updatedMeds = [...formData.medications];
+
+    if (editingMedIndex >= 0) {
+      // Editing existing medication - replace at index
+      updatedMeds[editingMedIndex] = newMed;
+    } else {
+      // Adding new medication - append to array
+      updatedMeds.push(newMed);
+    }
+
+    // Update formData with new medications array
+    updateField("medications", updatedMeds);
+
+    // Close the modal
+    closeMedModal();
+  };
+
+  /**
+   * deleteMedication
+   *
+   * Removes a medication from the array by index.
+   *
+   * @param {number} index - The index of the medication to delete
+   */
+  const deleteMedication = (index) => {
+    const updatedMeds = formData.medications.filter((_, i) => i !== index);
+    updateField("medications", updatedMeds);
+  };
+
+  /**
+   * getFrequencyLabel
+   *
+   * Returns a short label for the frequency (for display in medication list).
+   *
+   * @param {string} frequency - The frequency string
+   * @returns {string} - A short display label
+   */
+  const getFrequencyLabel = (frequency) => {
+    const freq = frequency?.toLowerCase() || "";
+    if (freq.includes("three")) return "3x daily";
+    if (freq.includes("twice")) return "2x daily";
+    if (freq.includes("as needed")) return "As needed";
+    return "1x daily";
   };
 
   // Handle form submission
@@ -4772,34 +4942,105 @@ function Onboarding({ user, onComplete }) {
     try {
       // Save profile to Firebase
       const profileRef = ref(database, `users/${user.uid}/profile`);
-      await set(profileRef, {
-        ...formData,
+
+      const profileData = {
+        fullName: formData.fullName,
+        phone: formData.phone,
+        dob: formData.dob,
+        emergencyContact: formData.emergencyContact,
+        emergencyContactPhone: formData.emergencyContactPhone,
+        doctorName: formData.doctorName,
+        doctorPhone: formData.doctorPhone,
+        surgeryName: formData.surgeryName,
+        surgeryPhone: formData.surgeryPhone,
+        allergies: formData.allergies,
+        accessibilityNeeds: formData.accessibilityNeeds,
+        language: formData.language,
         onboardingComplete: true,
         createdAt: new Date().toISOString(),
-      });
+      };
+
+      await set(profileRef, profileData);
 
       // If user entered medications, save them separately
-      if (formData.medications.trim()) {
+      if (formData.medications.length > 0) {
+        // Reference to user's medications collection
         const medsRef = ref(database, `users/${user.uid}/medications`);
-        const medicationsList = formData.medications
-          .split(",")
-          .map((med) => med.trim())
-          .filter((med) => med);
 
-        for (const medName of medicationsList) {
-          await push(medsRef, {
-            name: medName,
-            dosage: "",
-            frequency: "Once daily",
-            time: "08:00",
-            notes: "",
+        // Reference to user's reminders collection
+        const remindersRef = ref(database, `users/${user.uid}/reminders`);
+
+        // Loop through each medication and save it
+        for (const med of formData.medications) {
+          // ─── Save the medication ───
+          const newMedRef = await push(medsRef, {
+            name: med.name,
+            dosage: med.dosage,
+            frequency: med.frequency,
+            timeSlot: med.timeSlot,
+            time: med.time,
+            notes: med.notes,
             createdAt: new Date().toISOString(),
           });
-        }
-      }
 
+          // Get the new medication's unique ID (needed for linking reminders)
+          const newMedId = newMedRef.key;
+          console.log(`✅ Medication "${med.name}" saved with ID: ${newMedId}`);
+
+          // ─── Create Reminders Based on Frequency ───
+          // Determine reminder times based on the medication's frequency
+          const freq = med.frequency.toLowerCase();
+          let reminderTimes = [];
+
+          if (freq.includes("three times")) {
+            // Three times daily: morning, afternoon, evening
+            reminderTimes = [
+              { label: "Morning", time: med.morningTime || "08:00" },
+              { label: "Afternoon", time: med.afternoonTime || "14:00" },
+              { label: "Evening", time: med.eveningTime || "18:00" },
+            ];
+          } else if (freq.includes("twice")) {
+            // Twice daily: morning and evening
+            reminderTimes = [
+              { label: "Morning", time: med.morningTime || "08:00" },
+              { label: "Evening", time: med.eveningTime || "18:00" },
+            ];
+          } else if (freq.includes("as needed")) {
+            // As needed: no automatic reminders (user decides when to take)
+            reminderTimes = [];
+          } else {
+            // Once daily: use the specific time and slot from the form
+            reminderTimes = [
+              { label: med.timeSlot || "Daily", time: med.time || "08:00" },
+            ];
+          }
+
+          // Create a reminder for each scheduled time
+          for (const { label, time } of reminderTimes) {
+            await push(remindersRef, {
+              type: "medication",
+              title: `Take ${med.name} (${med.dosage})`,
+              time: time,
+              days: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"], // Every day
+              notes: med.notes || `${label} dose - ${med.frequency}`,
+              enabled: true,
+              linkedMedicationId: newMedId, // Link to medication for future cleanup
+              createdAt: new Date().toISOString(),
+            });
+            console.log(
+              `  ✅ Reminder created for ${med.name} at ${time} (${label})`,
+            );
+          }
+        }
+
+        console.log(
+          `✅ All ${formData.medications.length} medications and reminders saved`,
+        );
+      }
+      // Call the onComplete callback to move to the next step
       onComplete();
     } catch (error) {
+      // Handle any errors that occur during saving
       console.error("Error saving onboarding data:", error);
       alert("Failed to save. Please try again.");
     } finally {
@@ -4880,7 +5121,7 @@ function Onboarding({ user, onComplete }) {
             <div className="onboarding-step">
               <h2 className="step-title">👤 Personal Information</h2>
               <p className="step-description">Tell us a bit about yourself</p>
-
+              {/* Full Name (Required) */}
               <div className="form-field">
                 <label className="form-label">Full Name *</label>
                 <input
@@ -4891,7 +5132,7 @@ function Onboarding({ user, onComplete }) {
                   onChange={(e) => updateField("fullName", e.target.value)}
                 />
               </div>
-
+              {/* Phone Number (Optional) */}
               <div className="form-field">
                 <label className="form-label">Phone Number</label>
                 <input
@@ -4902,7 +5143,7 @@ function Onboarding({ user, onComplete }) {
                   onChange={(e) => updateField("phone", e.target.value)}
                 />
               </div>
-
+              {/* Date of Birth (Optional) */}
               <div className="form-field">
                 <label className="form-label">Date of Birth</label>
                 <input
@@ -4922,7 +5163,7 @@ function Onboarding({ user, onComplete }) {
               <p className="step-description">
                 Who should we contact in case of an emergency?
               </p>
-
+              {/* Emergency Contact Name (Required) */}
               <div className="form-field">
                 <label className="form-label">Emergency Contact Name *</label>
                 <input
@@ -4935,7 +5176,7 @@ function Onboarding({ user, onComplete }) {
                   }
                 />
               </div>
-
+              {/* Emergency Contact Phone number (Required) */}
               <div className="form-field">
                 <label className="form-label">Emergency Contact Phone *</label>
                 <input
@@ -5010,20 +5251,141 @@ function Onboarding({ user, onComplete }) {
             <div className="onboarding-step">
               <h2 className="step-title">💊 Medical Information</h2>
               <p className="step-description">
-                Help us understand your health needs (you can update this later)
+                Add your current medications (you can always update this later)
               </p>
 
+              {/* ─── MEDICATIONS SECTION ─── */}
               <div className="form-field">
-                <label className="form-label">Current Medications</label>
-                <textarea
-                  className="form-input form-textarea"
-                  placeholder="List your medications separated by commas&#10;e.g., Aspirin, Metformin, Lisinopril"
-                  value={formData.medications}
-                  onChange={(e) => updateField("medications", e.target.value)}
-                  rows={4}
-                />
-                <p className="form-hint">
-                  💡 These will be added to your medication tracker
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    marginBottom: 12,
+                  }}
+                >
+                  <label className="form-label" style={{ marginBottom: 0 }}>
+                    Current Medications
+                  </label>
+                  <button
+                    type="button"
+                    onClick={openAddMedModal}
+                    style={{
+                      background: "#2563eb",
+                      color: "white",
+                      border: "none",
+                      borderRadius: 8,
+                      padding: "8px 16px",
+                      fontSize: 14,
+                      fontWeight: 600,
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                    }}
+                  >
+                    + Add Medication
+                  </button>
+                </div>
+
+                {/* ─── MEDICATIONS LIST ─── */}
+                {formData.medications.length === 0 ? (
+                  // Empty state
+                  <div
+                    style={{
+                      background: "#f8fafc",
+                      border: "2px dashed #e2e8f0",
+                      borderRadius: 12,
+                      padding: 24,
+                      textAlign: "center",
+                      color: "#64748b",
+                    }}
+                  >
+                    <div style={{ fontSize: 32, marginBottom: 8 }}>💊</div>
+                    <p style={{ margin: 0 }}>No medications added yet</p>
+                    <p style={{ margin: "8px 0 0", fontSize: 13 }}>
+                      Click "Add Medication" to add your first medication
+                    </p>
+                  </div>
+                ) : (
+                  // Medications list
+                  <div
+                    style={{ display: "flex", flexDirection: "column", gap: 8 }}
+                  >
+                    {formData.medications.map((med, index) => (
+                      <div
+                        key={index}
+                        style={{
+                          background: "#f8fafc",
+                          border: "2px solid #e2e8f0",
+                          borderRadius: 10,
+                          padding: "12px 16px",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                        }}
+                      >
+                        {/* Medication info */}
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 12,
+                          }}
+                        >
+                          <span style={{ fontSize: 24 }}>💊</span>
+                          <div>
+                            <div style={{ fontWeight: 600, color: "#1e293b" }}>
+                              {med.name}
+                            </div>
+                            <div style={{ fontSize: 12, color: "#64748b" }}>
+                              {med.dosage} • {getFrequencyLabel(med.frequency)}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Action buttons */}
+                        <div style={{ display: "flex", gap: 8 }}>
+                          {/* Edit button */}
+                          <button
+                            type="button"
+                            onClick={() => openEditMedModal(index)}
+                            style={{
+                              background: "#eff6ff",
+                              border: "none",
+                              borderRadius: 6,
+                              padding: "6px 10px",
+                              cursor: "pointer",
+                              fontSize: 14,
+                            }}
+                            title="Edit medication"
+                          >
+                            ✏️
+                          </button>
+                          {/* Delete button */}
+                          <button
+                            type="button"
+                            onClick={() => deleteMedication(index)}
+                            style={{
+                              background: "#fef2f2",
+                              border: "none",
+                              borderRadius: 6,
+                              padding: "6px 10px",
+                              cursor: "pointer",
+                              fontSize: 14,
+                            }}
+                            title="Delete medication"
+                          >
+                            🗑️
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <p className="form-hint" style={{ marginTop: 12 }}>
+                  💡 Reminders will be automatically created for each medication
                 </p>
               </div>
 
@@ -5121,6 +5483,189 @@ function Onboarding({ user, onComplete }) {
           )}
         </div>
       </div>
+
+      {/*ADD/EDIT MEDICATION MODAL */}
+      {showMedModal && (
+        <div
+          className="modal-overlay"
+          onClick={closeMedModal}
+          style={{ zIndex: 10000 }}
+        >
+          <div
+            className="modal"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: 500 }}
+          >
+            {/* Modal Header */}
+            <div className="modal-header">
+              <div>
+                <h2>
+                  {editingMedIndex >= 0 ? "Edit Medication" : "Add Medication"}
+                </h2>
+                <p className="modal-subtitle">
+                  {editingMedIndex >= 0
+                    ? "Update medication details"
+                    : "Add a new medication to track"}
+                </p>
+              </div>
+              <button className="modal-close" onClick={closeMedModal}>
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="modal-body">
+              {/* Medication Name (Required) */}
+              <label className="form-label">Medication Name *</label>
+              <input
+                className="form-input"
+                placeholder="e.g., Aspirin"
+                value={medName}
+                onChange={(e) => setMedName(e.target.value)}
+              />
+
+              {/* Dosage and Frequency Row */}
+              <div className="form-row" style={{ marginTop: 16 }}>
+                <div className="form-group" style={{ flex: 1 }}>
+                  <label className="form-label">Dosage *</label>
+                  <input
+                    className="form-input"
+                    placeholder="e.g., 100mg"
+                    value={medDosage}
+                    onChange={(e) => setMedDosage(e.target.value)}
+                  />
+                </div>
+
+                <div className="form-group" style={{ flex: 1 }}>
+                  <label className="form-label">Frequency</label>
+                  <select
+                    className="form-input"
+                    value={medFreq}
+                    onChange={(e) => setMedFreq(e.target.value)}
+                  >
+                    <option value="Once daily">Once daily</option>
+                    <option value="Twice daily">Twice daily</option>
+                    <option value="Three times daily">Three times daily</option>
+                    <option value="As needed">As needed</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Time Settings - changes based on frequency */}
+              <div className="form-row" style={{ marginTop: 16 }}>
+                {/* Once daily: show time slot and single time */}
+                {!medFreq.toLowerCase().includes("twice") &&
+                  !medFreq.toLowerCase().includes("three") && (
+                    <>
+                      <div className="form-group" style={{ flex: 1 }}>
+                        <label className="form-label">Time Slot</label>
+                        <select
+                          className="form-input"
+                          value={medTimeSlot}
+                          onChange={(e) => setMedTimeSlot(e.target.value)}
+                        >
+                          <option value="Morning">🌅 Morning</option>
+                          <option value="Afternoon">☀️ Afternoon</option>
+                          <option value="Evening">🌙 Evening</option>
+                          <option value="Night">🌛 Night</option>
+                        </select>
+                      </div>
+
+                      <div className="form-group" style={{ flex: 1 }}>
+                        <label className="form-label">Time</label>
+                        <input
+                          type="time"
+                          className="form-input"
+                          value={medTime}
+                          onChange={(e) => setMedTime(e.target.value)}
+                        />
+                      </div>
+                    </>
+                  )}
+
+                {/* Twice daily: show morning and evening times */}
+                {medFreq.toLowerCase().includes("twice") && (
+                  <>
+                    <div className="form-group" style={{ flex: 1 }}>
+                      <label className="form-label">Morning Time</label>
+                      <input
+                        type="time"
+                        className="form-input"
+                        value={medMorningTime}
+                        onChange={(e) => setMedMorningTime(e.target.value)}
+                      />
+                    </div>
+                    <div className="form-group" style={{ flex: 1 }}>
+                      <label className="form-label">Evening Time</label>
+                      <input
+                        type="time"
+                        className="form-input"
+                        value={medEveningTime}
+                        onChange={(e) => setMedEveningTime(e.target.value)}
+                      />
+                    </div>
+                  </>
+                )}
+
+                {/* Three times daily: show morning, afternoon, evening times */}
+                {medFreq.toLowerCase().includes("three") && (
+                  <>
+                    <div className="form-group" style={{ flex: 1 }}>
+                      <label className="form-label">Morning</label>
+                      <input
+                        type="time"
+                        className="form-input"
+                        value={medMorningTime}
+                        onChange={(e) => setMedMorningTime(e.target.value)}
+                      />
+                    </div>
+                    <div className="form-group" style={{ flex: 1 }}>
+                      <label className="form-label">Afternoon</label>
+                      <input
+                        type="time"
+                        className="form-input"
+                        value={medAfternoonTime}
+                        onChange={(e) => setMedAfternoonTime(e.target.value)}
+                      />
+                    </div>
+                    <div className="form-group" style={{ flex: 1 }}>
+                      <label className="form-label">Evening</label>
+                      <input
+                        type="time"
+                        className="form-input"
+                        value={medEveningTime}
+                        onChange={(e) => setMedEveningTime(e.target.value)}
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Notes */}
+              <div style={{ marginTop: 16 }}>
+                <label className="form-label">Notes (Optional)</label>
+                <textarea
+                  className="form-input form-textarea"
+                  placeholder="Additional instructions (e.g., take with food)"
+                  value={medNotes}
+                  onChange={(e) => setMedNotes(e.target.value)}
+                  rows={2}
+                />
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="modal-footer">
+              <button className="modal-cancel" onClick={closeMedModal}>
+                Cancel
+              </button>
+              <button className="modal-submit" onClick={saveMedication}>
+                {editingMedIndex >= 0 ? "Update Medication" : "Add Medication"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
