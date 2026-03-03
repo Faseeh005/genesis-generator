@@ -804,6 +804,19 @@ function Dashboard({ user, userProfile, medications, setActivePage }) {
   // This is the same state we use in the Medications page
   const [takenMeds, setTakenMeds] = useState({});
 
+  // NOTIFICATIONS STATE
+  // Controls whether the notifications dropdown is visible
+  const [showNotifications, setShowNotifications] = useState(false);
+
+  // Stores the user's reminders/notifications from Firebase
+  const [notifications, setNotifications] = useState([]);
+
+  // Stores notification history (past notifications that have been triggered)
+  const [notificationHistory, setNotificationHistory] = useState([]);
+
+  // Count of unread notifications
+  const [unreadCount, setUnreadCount] = useState(0);
+
   // Hover state for donut chart tooltip
   const [hoveredSegment, setHoveredSegment] = useState(null); // 'taken', 'pending', or null
 
@@ -981,6 +994,173 @@ function Dashboard({ user, userProfile, medications, setActivePage }) {
     };
   }, [user, today]);
 
+  // LOAD NOTIFICATIONS FROM FIREBASE
+  // This effect loads: upcoming medication reminders and notification history
+
+  useEffect(() => {
+    if (!user) return;
+
+    // Load Active Reminders
+    const remindersRef = ref(database, `users/${user.uid}/reminders`);
+
+    const unsubscribeReminders = onValue(remindersRef, (snapshot) => {
+      if (snapshot.val()) {
+        const remindersData = snapshot.val();
+        const remindersList = Object.entries(remindersData).map(
+          ([id, reminder]) => ({
+            id,
+            ...reminder,
+          }),
+        );
+
+        // Sort by time (earliest first)
+        remindersList.sort((a, b) => {
+          const timeA = a.time || "00:00";
+          const timeB = b.time || "00:00";
+          return timeA.localeCompare(timeB);
+        });
+
+        setNotifications(remindersList);
+      } else {
+        setNotifications([]);
+      }
+    });
+
+    // Load Notification History
+    const historyRef = ref(database, `users/${user.uid}/notificationHistory`);
+
+    const unsubscribeHistory = onValue(historyRef, (snapshot) => {
+      if (snapshot.val()) {
+        const historyData = snapshot.val();
+        const historyList = Object.entries(historyData).map(
+          ([id, notification]) => ({
+            id,
+            ...notification,
+          }),
+        );
+
+        // Sort by timestamp (most recent first)
+        historyList.sort((a, b) => {
+          const dateA = new Date(a.triggeredAt || 0);
+          const dateB = new Date(b.triggeredAt || 0);
+          return dateB - dateA;
+        });
+
+        // Count unread notifications
+        const unread = historyList.filter((n) => !n.read).length;
+        setUnreadCount(unread);
+
+        setNotificationHistory(historyList);
+      } else {
+        setNotificationHistory([]);
+        setUnreadCount(0);
+      }
+    });
+
+    // Cleanup listeners
+    return () => {
+      unsubscribeReminders();
+      unsubscribeHistory();
+    };
+  }, [user]);
+
+  // Notification helper functions
+
+  const formatTime = (time) => {
+    if (!time) return "";
+    const [hours, minutes] = time.split(":");
+    const hour = parseInt(hours);
+    return `${hour > 12 ? hour - 12 : hour || 12}:${minutes} ${hour >= 12 ? "PM" : "AM"}`;
+  };
+
+  const formatNotificationDate = (dateString) => {
+    if (!dateString) return "";
+
+    const date = new Date(dateString);
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    // Check if it's today
+    if (date.toDateString() === today.toDateString()) {
+      return `Today at ${date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`;
+    }
+
+    // Check if it's yesterday
+    if (date.toDateString() === yesterday.toDateString()) {
+      return `Yesterday at ${date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`;
+    }
+
+    // Otherwise show the date
+    return date.toLocaleDateString("en-GB", {
+      day: "numeric",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
+  const markNotificationAsRead = async (notificationId) => {
+    if (!user) return;
+
+    const notificationRef = ref(
+      database,
+      `users/${user.uid}/notificationHistory/${notificationId}`,
+    );
+    await update(notificationRef, { read: true });
+  };
+
+  const markAllNotificationsAsRead = async () => {
+    if (!user) return;
+
+    const updates = {};
+    notificationHistory.forEach((notification) => {
+      if (!notification.read) {
+        updates[
+          `users/${user.uid}/notificationHistory/${notification.id}/read`
+        ] = true;
+      }
+    });
+
+    if (Object.keys(updates).length > 0) {
+      await update(ref(database), updates);
+    }
+  };
+
+  const clearAllNotifications = async () => {
+    if (!user) return;
+
+    const historyRef = ref(database, `users/${user.uid}/notificationHistory`);
+    await remove(historyRef);
+    setNotificationHistory([]);
+    setUnreadCount(0);
+  };
+
+  const getNotificationIcon = (type) => {
+    switch (type) {
+      case "medication":
+        return "💊";
+      case "appointment":
+        return "📅";
+      case "measurement":
+        return "📊";
+      case "exercise":
+        return "🏃";
+      case "water":
+        return "💧";
+      default:
+        return "🔔";
+    }
+  };
+
+  const toggleNotifications = () => {
+    setShowNotifications(!showNotifications);
+  };
+
+  const closeNotifications = () => {
+    setShowNotifications(false);
+  };
+
   // This function returns the best available name for the user:
   // 1. First, try to get the first name from their profile (set during onboarding)
   // 2. If no profile name, fall back to the email prefix
@@ -990,7 +1170,7 @@ function Dashboard({ user, userProfile, medications, setActivePage }) {
   // - If no profile but email is "john@example.com" → returns "john"
 
   const getUserDisplayName = () => {
-    // ─── Try to get name from user profile ───
+    // Try to get name from user profile
     if (userProfile && userProfile.fullName) {
       // Get the first name (everything before the first space)
       const firstName = userProfile.fullName.split(" ")[0];
@@ -1001,7 +1181,7 @@ function Dashboard({ user, userProfile, medications, setActivePage }) {
       );
     }
 
-    // ─── Fall back to email prefix ───
+    // Fall back to email prefix
     // If no profile name is available, use the part before @ in the email
     if (user && user.email) {
       const emailPrefix = user.email.split("@")[0];
@@ -1009,7 +1189,7 @@ function Dashboard({ user, userProfile, medications, setActivePage }) {
       return emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1);
     }
 
-    // ─── Default fallback ───
+    // Default fallback
     return "User";
   };
 
@@ -1127,6 +1307,8 @@ function Dashboard({ user, userProfile, medications, setActivePage }) {
 
   // Render Dashboard UI
 
+  // Render Dashboard UI
+
   return (
     <div className="page">
       {/* PAGE HEADER */}
@@ -1141,9 +1323,447 @@ function Dashboard({ user, userProfile, medications, setActivePage }) {
         <div className="header-right">
           <span className="online-dot"></span>
           <span className="header-user">Logged in as {displayName}</span>
-          <button className="bell-btn" title="Notifications">
-            🔔
-          </button>
+
+          {/* ═══ NOTIFICATIONS BELL BUTTON ═══ */}
+          <div style={{ position: "relative" }}>
+            <button
+              className="bell-btn"
+              title="Notifications"
+              onClick={toggleNotifications}
+              style={{
+                position: "relative",
+                background: showNotifications ? "#e0e7ff" : "transparent",
+                borderRadius: 8,
+              }}
+            >
+              🔔
+              {/* Unread badge */}
+              {unreadCount > 0 && (
+                <span
+                  style={{
+                    position: "absolute",
+                    top: -4,
+                    right: -4,
+                    background: "#ef4444",
+                    color: "white",
+                    fontSize: 10,
+                    fontWeight: 700,
+                    borderRadius: "50%",
+                    minWidth: 18,
+                    height: 18,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    padding: "0 4px",
+                    border: "2px solid white",
+                  }}
+                >
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </span>
+              )}
+            </button>
+
+            {/* ═══ NOTIFICATIONS DROPDOWN ═══ */}
+            {showNotifications && (
+              <>
+                {/* Backdrop to close dropdown when clicking outside */}
+                <div
+                  style={{
+                    position: "fixed",
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    zIndex: 998,
+                  }}
+                  onClick={closeNotifications}
+                />
+
+                {/* Dropdown panel */}
+                <div
+                  style={{
+                    position: "absolute",
+                    top: "calc(100% + 8px)",
+                    right: 0,
+                    width: 360,
+                    maxHeight: 480,
+                    background: "white",
+                    borderRadius: 16,
+                    boxShadow: "0 10px 40px rgba(0, 0, 0, 0.2)",
+                    zIndex: 999,
+                    overflow: "hidden",
+                    display: "flex",
+                    flexDirection: "column",
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {/* Dropdown Header */}
+                  <div
+                    style={{
+                      padding: "16px 20px",
+                      borderBottom: "1px solid #e2e8f0",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      background: "#f8fafc",
+                    }}
+                  >
+                    <div>
+                      <h3
+                        style={{
+                          margin: 0,
+                          fontSize: 16,
+                          fontWeight: 700,
+                          color: "#1e293b",
+                        }}
+                      >
+                        Notifications
+                      </h3>
+                      <p
+                        style={{
+                          margin: "4px 0 0",
+                          fontSize: 12,
+                          color: "#64748b",
+                        }}
+                      >
+                        {unreadCount > 0
+                          ? `${unreadCount} unread`
+                          : "All caught up!"}
+                      </p>
+                    </div>
+
+                    {/* Header actions */}
+                    <div style={{ display: "flex", gap: 8 }}>
+                      {unreadCount > 0 && (
+                        <button
+                          onClick={markAllNotificationsAsRead}
+                          style={{
+                            background: "none",
+                            border: "none",
+                            color: "#2563eb",
+                            fontSize: 12,
+                            cursor: "pointer",
+                            padding: "4px 8px",
+                          }}
+                          title="Mark all as read"
+                        >
+                          ✓ Mark all read
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Dropdown Content */}
+                  <div
+                    style={{
+                      flex: 1,
+                      overflowY: "auto",
+                      maxHeight: 360,
+                    }}
+                  >
+                    {/* ─── UPCOMING REMINDERS SECTION ─── */}
+                    {notifications.length > 0 && (
+                      <div>
+                        <div
+                          style={{
+                            padding: "12px 20px 8px",
+                            fontSize: 11,
+                            fontWeight: 600,
+                            color: "#64748b",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.5px",
+                            background: "#f8fafc",
+                          }}
+                        >
+                          📅 Upcoming Reminders
+                        </div>
+
+                        {notifications.slice(0, 5).map((reminder) => (
+                          <div
+                            key={reminder.id}
+                            style={{
+                              padding: "12px 20px",
+                              borderBottom: "1px solid #f1f5f9",
+                              display: "flex",
+                              alignItems: "flex-start",
+                              gap: 12,
+                              transition: "background 0.2s",
+                              cursor: "pointer",
+                            }}
+                            onMouseEnter={(e) =>
+                              (e.currentTarget.style.background = "#f8fafc")
+                            }
+                            onMouseLeave={(e) =>
+                              (e.currentTarget.style.background = "white")
+                            }
+                          >
+                            {/* Icon */}
+                            <div
+                              style={{
+                                width: 36,
+                                height: 36,
+                                borderRadius: "50%",
+                                background: "#dbeafe",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                fontSize: 18,
+                                flexShrink: 0,
+                              }}
+                            >
+                              {getNotificationIcon(reminder.type)}
+                            </div>
+
+                            {/* Content */}
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div
+                                style={{
+                                  fontSize: 14,
+                                  fontWeight: 500,
+                                  color: "#1e293b",
+                                  marginBottom: 2,
+                                  whiteSpace: "nowrap",
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                }}
+                              >
+                                {reminder.title}
+                              </div>
+                              <div style={{ fontSize: 12, color: "#64748b" }}>
+                                ⏰ {formatTime(reminder.time)} • Every day
+                              </div>
+                            </div>
+
+                            {/* Status indicator */}
+                            <div
+                              style={{
+                                background: reminder.enabled
+                                  ? "#dcfce7"
+                                  : "#f1f5f9",
+                                color: reminder.enabled ? "#166534" : "#64748b",
+                                fontSize: 10,
+                                fontWeight: 600,
+                                padding: "4px 8px",
+                                borderRadius: 12,
+                              }}
+                            >
+                              {reminder.enabled ? "Active" : "Paused"}
+                            </div>
+                          </div>
+                        ))}
+
+                        {notifications.length > 5 && (
+                          <div
+                            style={{
+                              padding: "8px 20px",
+                              fontSize: 12,
+                              color: "#64748b",
+                              textAlign: "center",
+                              background: "#f8fafc",
+                            }}
+                          >
+                            +{notifications.length - 5} more reminders
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* ─── NOTIFICATION HISTORY SECTION ─── */}
+                    {notificationHistory.length > 0 && (
+                      <div>
+                        <div
+                          style={{
+                            padding: "12px 20px 8px",
+                            fontSize: 11,
+                            fontWeight: 600,
+                            color: "#64748b",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.5px",
+                            background: "#f8fafc",
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                          }}
+                        >
+                          <span>🕐 Recent Activity</span>
+                          {notificationHistory.length > 0 && (
+                            <button
+                              onClick={clearAllNotifications}
+                              style={{
+                                background: "none",
+                                border: "none",
+                                color: "#ef4444",
+                                fontSize: 11,
+                                cursor: "pointer",
+                                padding: 0,
+                              }}
+                            >
+                              Clear all
+                            </button>
+                          )}
+                        </div>
+
+                        {notificationHistory
+                          .slice(0, 10)
+                          .map((notification) => (
+                            <div
+                              key={notification.id}
+                              style={{
+                                padding: "12px 20px",
+                                borderBottom: "1px solid #f1f5f9",
+                                display: "flex",
+                                alignItems: "flex-start",
+                                gap: 12,
+                                background: notification.read
+                                  ? "white"
+                                  : "#eff6ff",
+                                transition: "background 0.2s",
+                                cursor: "pointer",
+                              }}
+                              onClick={() =>
+                                markNotificationAsRead(notification.id)
+                              }
+                              onMouseEnter={(e) => {
+                                if (notification.read) {
+                                  e.currentTarget.style.background = "#f8fafc";
+                                }
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.background =
+                                  notification.read ? "white" : "#eff6ff";
+                              }}
+                            >
+                              {/* Icon */}
+                              <div
+                                style={{
+                                  width: 36,
+                                  height: 36,
+                                  borderRadius: "50%",
+                                  background: notification.read
+                                    ? "#f1f5f9"
+                                    : "#dbeafe",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  fontSize: 18,
+                                  flexShrink: 0,
+                                }}
+                              >
+                                {getNotificationIcon(notification.type)}
+                              </div>
+
+                              {/* Content */}
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div
+                                  style={{
+                                    fontSize: 14,
+                                    fontWeight: notification.read ? 400 : 600,
+                                    color: "#1e293b",
+                                    marginBottom: 2,
+                                  }}
+                                >
+                                  {notification.title}
+                                </div>
+                                <div style={{ fontSize: 12, color: "#64748b" }}>
+                                  {formatNotificationDate(
+                                    notification.triggeredAt,
+                                  )}
+                                </div>
+                                {notification.message && (
+                                  <div
+                                    style={{
+                                      fontSize: 12,
+                                      color: "#64748b",
+                                      marginTop: 4,
+                                      whiteSpace: "nowrap",
+                                      overflow: "hidden",
+                                      textOverflow: "ellipsis",
+                                    }}
+                                  >
+                                    {notification.message}
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Unread indicator */}
+                              {!notification.read && (
+                                <div
+                                  style={{
+                                    width: 8,
+                                    height: 8,
+                                    borderRadius: "50%",
+                                    background: "#2563eb",
+                                    flexShrink: 0,
+                                    marginTop: 6,
+                                  }}
+                                />
+                              )}
+                            </div>
+                          ))}
+                      </div>
+                    )}
+
+                    {/* ─── EMPTY STATE ─── */}
+                    {notifications.length === 0 &&
+                      notificationHistory.length === 0 && (
+                        <div
+                          style={{
+                            padding: 40,
+                            textAlign: "center",
+                            color: "#64748b",
+                          }}
+                        >
+                          <div style={{ fontSize: 48, marginBottom: 12 }}>
+                            🔔
+                          </div>
+                          <div
+                            style={{
+                              fontSize: 14,
+                              fontWeight: 500,
+                              marginBottom: 4,
+                            }}
+                          >
+                            No notifications yet
+                          </div>
+                          <div style={{ fontSize: 12 }}>
+                            When you add medications, reminders will appear here
+                          </div>
+                        </div>
+                      )}
+                  </div>
+
+                  {/* Dropdown Footer */}
+                  <div
+                    style={{
+                      padding: "12px 20px",
+                      borderTop: "1px solid #e2e8f0",
+                      background: "#f8fafc",
+                      textAlign: "center",
+                    }}
+                  >
+                    <button
+                      onClick={() => {
+                        setActivePage("reminders");
+                        closeNotifications();
+                      }}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        color: "#2563eb",
+                        fontSize: 13,
+                        fontWeight: 600,
+                        cursor: "pointer",
+                        padding: "4px 8px",
+                      }}
+                    >
+                      View All Reminders →
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
           <button className="logout-btn" onClick={() => signOut(auth)}>
             <span>↪</span> Logout
           </button>
@@ -1157,7 +1777,6 @@ function Dashboard({ user, userProfile, medications, setActivePage }) {
           <p>Here's your health overview for today</p>
         </div>
       </div>
-
       {/* This banner appears when:
       The app is running on iOS (healthKitAvailable = true)
       The user hasn't connected Apple Health yet (healthKitAuthorized = false)
@@ -1306,7 +1925,7 @@ function Dashboard({ user, userProfile, medications, setActivePage }) {
           },
           {
             icon: "🏋️",
-            label: "Total Workouts",
+            label: "Total Exercises",
             value: activities.length,
             sub: "This month",
             color: "#fff7ed",
@@ -1523,7 +2142,7 @@ function Dashboard({ user, userProfile, medications, setActivePage }) {
           {
             icon: "🏃",
             label: "Fitness Tracker",
-            sub: "Track your workouts",
+            sub: "Track your exercises",
             page: "fitness",
           },
           {
@@ -2571,7 +3190,7 @@ function Medications({
 }
 
 // FITNESS TRACKER COMPONENT
-// Page for tracking workouts and viewing fitness statistics
+// Page for tracking exercises and viewing fitness statistics
 // Shows workout cards, summary stats, and step counter
 
 function FitnessPage({ user, userProfile, setActivePage, voiceEnabled }) {
@@ -2582,8 +3201,8 @@ function FitnessPage({ user, userProfile, setActivePage, voiceEnabled }) {
     activities: [],
   });
 
-  // Controls whether the "Add Workout" form is visible for custom workouts
-  const [showAddWorkout, setShowAddWorkout] = useState(false);
+  // Controls whether the "Add Exercise" form is visible for custom workouts
+  const [showAddExercise, setShowAddExercise] = useState(false);
 
   // Controls whether the exercise template modal is visible
   const [showTemplateModal, setShowTemplateModal] = useState(false);
@@ -2968,7 +3587,7 @@ function FitnessPage({ user, userProfile, setActivePage, voiceEnabled }) {
     }
 
     // Reset form and hide it
-    setShowAddWorkout(false);
+    setShowAddExercise(false);
     setWorkoutName("");
     setWorkoutCount("");
     setWorkoutDuration("");
@@ -3185,15 +3804,15 @@ function FitnessPage({ user, userProfile, setActivePage, voiceEnabled }) {
         <h2 className="section-title-lg">Your Workouts</h2>
         <button
           className="add-med-btn"
-          onClick={() => setShowAddWorkout(!showAddWorkout)}
+          onClick={() => setShowAddExercise(!showAddExercise)}
           style={{ background: "#475569" }}
         >
           + Custom Workout
         </button>
       </div>
 
-      {/* ═══ ADD CUSTOM WORKOUT FORM ═══ */}
-      {showAddWorkout && (
+      {/* ═══ ADD CUSTOM EXERCISE FORM ═══ */}
+      {showAddExercise && (
         <div className="card-white" style={{ marginBottom: 16 }}>
           <h3 className="section-title">Add Custom Workout</h3>
           <div className="form-row">
@@ -3690,7 +4309,6 @@ function HealthProfile({ user, medications, setActivePage, voiceEnabled }) {
     surgeryName: "",
     surgeryPhone: "",
     allergies: "",
-    language: "English",
     accessibilityNeeds: "",
   });
 
@@ -4036,33 +4654,6 @@ function HealthProfile({ user, medications, setActivePage, voiceEnabled }) {
                 <div className="profile-field-value">
                   {profile.accessibilityNeeds || "None specified"}
                 </div>
-              )}
-            </div>
-
-            {/* Preferred Language */}
-            <div className="profile-field">
-              <div className="profile-field-label">Preferred Language</div>
-              {editing ? (
-                <select
-                  className="form-input"
-                  value={profile.language}
-                  onChange={(e) =>
-                    setProfile({ ...profile, language: e.target.value })
-                  }
-                >
-                  {[
-                    "English",
-                    "Spanish",
-                    "French",
-                    "German",
-                    "Urdu",
-                    "Arabic",
-                  ].map((lang) => (
-                    <option key={lang}>{lang}</option>
-                  ))}
-                </select>
-              ) : (
-                <div className="profile-field-value">{profile.language}</div>
               )}
             </div>
           </div>
@@ -4757,9 +5348,6 @@ function Onboarding({ user, onComplete }) {
 
     // Accessibility
     accessibilityNeeds: "",
-
-    // Preferences
-    language: "English",
   });
 
   // These fields are used for the medication add/edit modal
@@ -4955,7 +5543,6 @@ function Onboarding({ user, onComplete }) {
         surgeryPhone: formData.surgeryPhone,
         allergies: formData.allergies,
         accessibilityNeeds: formData.accessibilityNeeds,
-        language: formData.language,
         onboardingComplete: true,
         createdAt: new Date().toISOString(),
       };
@@ -5419,26 +6006,8 @@ function Onboarding({ user, onComplete }) {
                   onChange={(e) =>
                     updateField("accessibilityNeeds", e.target.value)
                   }
-                  rows={3}
+                  rows={4}
                 />
-              </div>
-
-              <div className="form-field">
-                <label className="form-label">Preferred Language</label>
-                <select
-                  className="form-input"
-                  value={formData.language}
-                  onChange={(e) => updateField("language", e.target.value)}
-                >
-                  <option value="English">English</option>
-                  <option value="Spanish">Spanish</option>
-                  <option value="French">French</option>
-                  <option value="German">German</option>
-                  <option value="Urdu">Urdu</option>
-                  <option value="Arabic">Arabic</option>
-                  <option value="Chinese">Chinese</option>
-                  <option value="Hindi">Hindi</option>
-                </select>
               </div>
 
               <div className="onboarding-summary">
@@ -5447,6 +6016,13 @@ function Onboarding({ user, onComplete }) {
                   Click "Complete Setup" to start using MedFit Health. You can
                   always update this information later in your Health Profile.
                 </p>
+                {formData.medications.length > 0 && (
+                  <p style={{ color: "#166534", marginTop: 8 }}>
+                    📋 {formData.medications.length} medication
+                    {formData.medications.length > 1 ? "s" : ""} will be added
+                    with reminders
+                  </p>
+                )}
               </div>
             </div>
           )}
