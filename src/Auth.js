@@ -1,15 +1,28 @@
+// ══════════════════════════════════════════════════════════════════════════════
+// AUTH COMPONENT - Login and Signup Page
+// This component handles user authentication (logging in and signing up)
+// It's shown when the user is not logged in
+// ══════════════════════════════════════════════════════════════════════════════
+
 // Import React and the useState hook for managing component state
 import React, { useState } from "react";
 
 // Import Firebase authentication functions
-import { auth } from "./firebase";
+import { auth } from "./firebase"; // Our Firebase configuration
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
+  sendPasswordResetEmail,
 } from "firebase/auth";
 
-function Auth({ user, setUser }) {
+// ──────────────────────────────────────────────────────────────────────────────
+// Auth Component Function
+// Props:
+//   - user: the currently logged-in user (should be null when this renders)
+//   - setUser: function to update the user state in the parent component
+// ──────────────────────────────────────────────────────────────────────────────
 
+function Auth({ user, setUser }) {
   // email - stores the email address entered by the user
   const [email, setEmail] = useState("");
 
@@ -20,9 +33,16 @@ function Auth({ user, setUser }) {
   // true = signup form, false = login form
   const [isSignUp, setIsSignUp] = useState(false);
 
+  // showForgotPassword - boolean that controls whether to show the forgot password form
+  // true = show forgot password form, false = show login/signup form
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+
   // error - stores any error message to show to the user
   // Empty string means no error
   const [error, setError] = useState("");
+
+  // successMessage stores success message for forgot password
+  const [successMessage, setSuccessMessage] = useState("");
 
   // loading - boolean that tracks if we're currently processing authentication
   // true = show loading state, false = normal state
@@ -38,6 +58,7 @@ function Auth({ user, setUser }) {
 
     // Clear any previous error messages
     setError("");
+    setSuccessMessage("");
 
     // Set loading state to true (shows "Please wait..." on button)
     setLoading(true);
@@ -109,12 +130,157 @@ function Auth({ user, setUser }) {
     }
   };
 
-  // Render Auth Page UI 
+  // HANDLE FORGOT PASSWORD
+  // ═══════════════════════════════════════════════════════════════════════════
+  //
+  // This function sends a password reset email to the user.
+  // The email contains a secure link that allows them to set a new password.
+  //
+  // How it works:
+  // 1. User enters their email address
+  // 2. Firebase sends an email with a secure reset link
+  // 3. User clicks the link and is taken to a Firebase-hosted page
+  // 4. User enters their new password
+  // 5. Password is updated and user can log in with the new password
+  //
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  const handleForgotPassword = async (e) => {
+    // Prevent the form from refreshing the page
+    e.preventDefault();
+
+    // Clear any previous messages
+    setError("");
+    setSuccessMessage("");
+
+    // ─── VALIDATE EMAIL IS ENTERED ───
+    if (!email || email.trim() === "") {
+      setError("Please enter your email address.");
+      return; // Stop here if no email
+    }
+
+    // ─── BASIC EMAIL FORMAT VALIDATION ───
+    // This regex checks for a basic email pattern: something@something.something
+    // ^ = start of string
+    // [^\s@]+ = one or more characters that are NOT whitespace or @
+    // @ = literal @ symbol
+    // [^\s@]+ = one or more characters that are NOT whitespace or @
+    // \. = literal dot
+    // [^\s@]+ = one or more characters that are NOT whitespace or @
+    // $ = end of string
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!emailRegex.test(email)) {
+      setError("Please enter a valid email address.");
+      return; // Stop here if email format is invalid
+    }
+
+    // Set loading state
+    setLoading(true);
+
+    try {
+      // ─── SEND THE PASSWORD RESET EMAIL ───
+      // sendPasswordResetEmail is a Firebase function that:
+      // 1. Checks if the email exists in the system (but doesn't tell us for security)
+      // 2. Generates a secure, time-limited reset token
+      // 3. Sends an email with a link containing the token
+      // 4. The link goes to a Firebase-hosted password reset page
+      await sendPasswordResetEmail(auth, email);
+
+      // ─── SHOW SUCCESS MESSAGE ───
+      setSuccessMessage(
+        "Password reset email sent! Please check your inbox (and spam folder) for a link to reset your password.",
+      );
+
+      // Clear the email field for security
+      // (so the email isn't visible if someone else uses the device)
+      setEmail("");
+    } catch (err) {
+      // ─── ERROR HANDLING ───
+      console.error("Password reset error:", err.code);
+
+      switch (err.code) {
+        case "auth/invalid-email":
+          setError("Please enter a valid email address.");
+          break;
+        case "auth/user-not-found":
+          // SECURITY NOTE: For security reasons, we show a generic success message
+          // even if the email doesn't exist. This prevents attackers from
+          // discovering which emails are registered in our system.
+          setSuccessMessage(
+            "If an account exists with this email, a password reset link has been sent. Please check your inbox.",
+          );
+          break;
+        case "auth/too-many-requests":
+          setError(
+            "Too many attempts. Please wait a few minutes before trying again.",
+          );
+          break;
+        case "auth/network-request-failed":
+          setError("Network error. Please check your internet connection.");
+          break;
+        default:
+          setError("Failed to send reset email. Please try again.");
+      }
+    } finally {
+      // Stop loading
+      setLoading(false);
+    }
+  };
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // FORM SWITCHING FUNCTIONS
+  // ═══════════════════════════════════════════════════════════════════════════
+  //
+  // These functions handle switching between the different forms
+  // (login, signup, forgot password) and clearing the state appropriately.
+  //
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * switchToLogin
+   *
+   * Switches to the login form and clears all messages.
+   */
+  const switchToLogin = () => {
+    setIsSignUp(false);
+    setShowForgotPassword(false);
+    setError("");
+    setSuccessMessage("");
+    setPassword(""); // Clear password for security
+  };
+
+  /**
+   * switchToSignUp
+   *
+   * Switches to the signup form and clears all messages.
+   */
+  const switchToSignUp = () => {
+    setIsSignUp(true);
+    setShowForgotPassword(false);
+    setError("");
+    setSuccessMessage("");
+    setPassword(""); // Clear password for security
+  };
+
+  /**
+   * switchToForgotPassword
+   *
+   * Switches to the forgot password form and clears all messages.
+   */
+  const switchToForgotPassword = () => {
+    setShowForgotPassword(true);
+    setError("");
+    setSuccessMessage("");
+    setPassword(""); // Clear password for security
+  };
+
+  // Render Auth Page UI
 
   return (
     // Outer container with centered layout
     <div className="auth-page">
-      {/* Card containing the login/signup form */}
+      {/* Card containing the login/signup/forgot password form */}
       <div className="auth-card">
         {/* Header section */}
 
@@ -127,91 +293,178 @@ function Auth({ user, setUser }) {
         {/* Subtitle - changes based on whether we're in signup or login mode */}
         <p className="auth-sub">
           {
-            isSignUp
-              ? "Create your account to get started" // Shown during signup
-              : "Welcome back! Log in to continue" // Shown during login
+            showForgotPassword
+              ? "Enter your email to receive a password reset link"
+              : isSignUp
+                ? "Create your account to get started" // Shown during signup
+                : "Welcome back! Log in to continue" // Shown during login
           }
         </p>
 
         {/* Only show error box if there's an error message */}
         {error && <div className="auth-error">⚠️ {error}</div>}
 
-        {/* Authentication form */}
-
-        {/* Form element - calls handleAuth when submitted */}
-        <form onSubmit={handleAuth}>
-          {/* Email field */}
-          <div className="auth-field">
-            <label className="auth-label">Email Address</label>
-            <input
-              className="auth-input"
-              type="email" // HTML5 email validation
-              placeholder="you@example.com"
-              value={email} // Controlled input - value comes from state
-              onChange={(e) => setEmail(e.target.value)} // Update state when user types
-              required // HTML5 required attribute
-            />
-          </div>
-
-          {/* Password field */}
-          <div className="auth-field">
-            <label className="auth-label">Password</label>
-            <input
-              className="auth-input"
-              type="password" // Hides password characters
-              placeholder="Min 6 characters"
-              value={password} // Controlled input
-              onChange={(e) => setPassword(e.target.value)} // Update state
-              required
-            />
-          </div>
-
-          {/* Submit button */}
-          <button
-            type="submit"
-            className="auth-submit"
-            disabled={loading} // Disable button while processing to prevent double-submission
-          >
-            {/* Button text changes based on state */}
-            {
-              loading
-                ? "⏳ Please wait..." // Shown while authenticating
-                : isSignUp
-                  ? "🚀 Create Account" // Shown in signup mode
-                  : "🔐 Log In" // Shown in login mode
-            }
-          </button>
-        </form>
-
-        {/* Toggle between Login and Signup */}
-
-        {/* Links to switch between login and signup modes */}
-        <div className="auth-toggle">
-          {/* Text changes based on current mode */}
-          {
-            isSignUp
-              ? "Already have an account?" // Shown in signup mode
-              : "Don't have an account?" // Shown in login mode
-          }
-
-          {/* Button to toggle between modes */}
-          <button
-            className="auth-toggle-btn"
-            onClick={() => {
-              // Toggle the signup mode
-              setIsSignUp(!isSignUp);
-
-              // Clear any error messages when switching modes
-              setError("");
+        {/* ═══ SUCCESS MESSAGE ═══ */}
+        {/* Only shows when password reset email is sent */}
+        {successMessage && (
+          <div
+            style={{
+              background: "#f0fdf4",
+              border: "2px solid #22c55e",
+              color: "#166534",
+              padding: "12px 16px",
+              borderRadius: 8,
+              fontSize: 14,
+              marginBottom: 16,
+              display: "flex",
+              alignItems: "flex-start",
+              gap: 8,
             }}
           >
-            {/* Button text is opposite of current mode */}
-            {isSignUp ? "Log In" : "Sign Up"}
-          </button>
-        </div>
+            <span>✅</span>
+            <span>{successMessage}</span>
+          </div>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════════════════
+            FORGOT PASSWORD FORM
+            Shows when showForgotPassword is true
+            ═══════════════════════════════════════════════════════════════════ */}
+        {showForgotPassword ? (
+          <form onSubmit={handleForgotPassword}>
+            {/* Email field */}
+            <div className="auth-field">
+              <label className="auth-label">Email Address</label>
+              <input
+                className="auth-input"
+                type="email"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                disabled={loading}
+              />
+            </div>
+
+            {/* Submit button */}
+            <button
+              type="submit"
+              className="auth-submit"
+              disabled={loading}
+              style={{ opacity: loading ? 0.7 : 1 }}
+            >
+              {loading ? "⏳ Sending..." : "📧 Send Reset Link"}
+            </button>
+
+            {/* Back to login link */}
+            <div className="auth-toggle" style={{ marginTop: 20 }}>
+              <span>Remember your password? </span>
+              <button
+                type="button"
+                className="auth-toggle-btn"
+                onClick={switchToLogin}
+              >
+                Back to Login
+              </button>
+            </div>
+          </form>
+        ) : (
+          /* ═══════════════════════════════════════════════════════════════════
+             LOGIN / SIGNUP FORM
+             Shows when showForgotPassword is false
+             ═══════════════════════════════════════════════════════════════════ */
+          <form onSubmit={handleAuth}>
+            {/* Email field */}
+            <div className="auth-field">
+              <label className="auth-label">Email Address</label>
+              <input
+                className="auth-input"
+                type="email"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                disabled={loading}
+              />
+            </div>
+
+            {/* Password field */}
+            <div className="auth-field">
+              <label className="auth-label">Password</label>
+              <input
+                className="auth-input"
+                type="password"
+                placeholder="Min 6 characters"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                disabled={loading}
+                minLength={6}
+              />
+            </div>
+
+            {/* Forgot Password link - only shows on login form */}
+            {!isSignUp && (
+              <div
+                style={{ textAlign: "right", marginBottom: 16, marginTop: -8 }}
+              >
+                <button
+                  type="button"
+                  onClick={switchToForgotPassword}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    color: "#2563eb",
+                    fontSize: 13,
+                    cursor: "pointer",
+                    textDecoration: "underline",
+                    padding: 0,
+                  }}
+                >
+                  Forgot your password?
+                </button>
+              </div>
+            )}
+
+            {/* Submit button */}
+            <button
+              type="submit"
+              className="auth-submit"
+              disabled={loading}
+              style={{ opacity: loading ? 0.7 : 1 }}
+            >
+              {loading
+                ? "⏳ Please wait..."
+                : isSignUp
+                  ? "🚀 Create Account"
+                  : "🔐 Log In"}
+            </button>
+
+            {/* Toggle between Login and Signup */}
+            <div className="auth-toggle">
+              {isSignUp
+                ? "Already have an account? "
+                : "Don't have an account? "}
+              <button
+                type="button"
+                className="auth-toggle-btn"
+                onClick={() => {
+                  if (isSignUp) {
+                    switchToLogin();
+                  } else {
+                    switchToSignUp();
+                  }
+                }}
+              >
+                {isSignUp ? "Log In" : "Sign Up"}
+              </button>
+            </div>
+          </form>
+        )}
       </div>
     </div>
   );
 }
 
+// Export the component so it can be imported in App.js
 export default Auth;
