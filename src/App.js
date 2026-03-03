@@ -1,5 +1,5 @@
 // React and hooks - the foundation of our React app
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, use } from "react";
 
 import "./App.css";
 
@@ -18,6 +18,8 @@ import { onAuthStateChanged, signOut, deleteUser } from "firebase/auth";
 
 // Gives access to Apple Health data on iOS devices
 import { useHealthKit } from "./useHealthKit";
+
+import { getUserDisplayName } from "./utils"; // Utility function for getting display name
 
 // Our custom components
 import Auth from "./Auth"; // Login/signup page
@@ -794,7 +796,7 @@ function Measurements({ user, setActivePage }) {
 // This is the main home page users see when they log in
 // Shows overview of health stats, water intake, charts, and quick action buttons
 
-function Dashboard({ user, medications, setActivePage }) {
+function Dashboard({ user, userProfile, medications, setActivePage }) {
   // fitness - stores today's fitness data (steps, water, activities)
   const [fitness, setFitness] = useState(null);
 
@@ -979,6 +981,41 @@ function Dashboard({ user, medications, setActivePage }) {
     };
   }, [user, today]);
 
+  // This function returns the best available name for the user:
+  // 1. First, try to get the first name from their profile (set during onboarding)
+  // 2. If no profile name, fall back to the email prefix
+  //
+  // Examples:
+  // - If profile has fullName "John Smith" → returns "John"
+  // - If no profile but email is "john@example.com" → returns "john"
+
+  const getUserDisplayName = () => {
+    // ─── Try to get name from user profile ───
+    if (userProfile && userProfile.fullName) {
+      // Get the first name (everything before the first space)
+      const firstName = userProfile.fullName.split(" ")[0];
+
+      // Capitalize the first letter (in case it was entered in lowercase)
+      return (
+        firstName.charAt(0).toUpperCase() + firstName.slice(1).toLowerCase()
+      );
+    }
+
+    // ─── Fall back to email prefix ───
+    // If no profile name is available, use the part before @ in the email
+    if (user && user.email) {
+      const emailPrefix = user.email.split("@")[0];
+      // Capitalize the first letter
+      return emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1);
+    }
+
+    // ─── Default fallback ───
+    return "User";
+  };
+
+  // Get the display name to use throughout the component
+  const displayName = getUserDisplayName(user, userProfile);
+
   // Add Water Function
 
   const addWater = (ml) => {
@@ -1103,7 +1140,7 @@ function Dashboard({ user, medications, setActivePage }) {
 
         <div className="header-right">
           <span className="online-dot"></span>
-          <span className="header-user">Logged in as {userName}</span>
+          <span className="header-user">Logged in as {displayName}</span>
           <button className="bell-btn" title="Notifications">
             🔔
           </button>
@@ -1116,10 +1153,7 @@ function Dashboard({ user, medications, setActivePage }) {
       {/* WELCOME BANNER */}
       <div className="welcome-banner">
         <div>
-          <h2>
-            Welcome back, {userName.charAt(0).toUpperCase() + userName.slice(1)}
-            !
-          </h2>
+          <h2>Welcome back, {displayName}!</h2>
           <p>Here's your health overview for today</p>
         </div>
       </div>
@@ -2540,7 +2574,7 @@ function Medications({
 // Page for tracking workouts and viewing fitness statistics
 // Shows workout cards, summary stats, and step counter
 
-function FitnessPage({ user, setActivePage, voiceEnabled }) {
+function FitnessPage({ user, userProfile, setActivePage, voiceEnabled }) {
   // fitness - stores today's fitness data
   const [fitness, setFitness] = useState({
     steps: 0,
@@ -2564,6 +2598,23 @@ function FitnessPage({ user, setActivePage, voiceEnabled }) {
   const [workoutName, setWorkoutName] = useState("");
   const [workoutCount, setWorkoutCount] = useState(""); // Number of reps/steps
   const [workoutDuration, setWorkoutDuration] = useState(""); // Minutes
+
+  // Get display name (add this near the top of the function)
+  const getUserDisplayName = () => {
+    if (userProfile && userProfile.fullName) {
+      const firstName = userProfile.fullName.split(" ")[0];
+      return (
+        firstName.charAt(0).toUpperCase() + firstName.slice(1).toLowerCase()
+      );
+    }
+    if (user && user.email) {
+      const emailPrefix = user.email.split("@")[0];
+      return emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1);
+    }
+    return "User";
+  };
+
+  const displayName = getUserDisplayName(user, userProfile);
 
   // Speak function uses browser's speech synthesis to read text aloud
   const speak = (text, enabled = true) => {
@@ -3049,7 +3100,7 @@ function FitnessPage({ user, setActivePage, voiceEnabled }) {
             <p className="page-subtitle">Track your daily exercises</p>
           </div>
         </div>
-        <span className="header-user">{userName}</span>
+        <span className="header-user">{displayName}</span>
       </div>
 
       {/* Stats Banner */}
@@ -5131,9 +5182,7 @@ export default function App() {
   // Load user profile from Firebase when component mounts
   useEffect(() => {
     if (!user) {
-      setUserProfile({});
-      setShowOnboarding(false);
-      setCheckingOnboarding(false);
+      setUserProfile(null);
       return;
     }
 
@@ -5273,6 +5322,7 @@ export default function App() {
     dashboard: (
       <Dashboard
         user={user}
+        userProfile={userProfile}
         medications={medications}
         setActivePage={setActivePage}
       />
@@ -5280,6 +5330,7 @@ export default function App() {
     medications: (
       <Medications
         user={user}
+        userProfile={userProfile}
         medications={medications}
         setActivePage={setActivePage}
         voiceEnabled={voiceEnabled}
@@ -5290,6 +5341,7 @@ export default function App() {
     chat: (
       <Chat
         user={user}
+        userProfile={userProfile}
         setActivePage={setActivePage}
         voiceEnabled={voiceEnabled}
         setVoiceEnabled={setVoiceEnabled}
@@ -5314,6 +5366,7 @@ export default function App() {
     settings: (
       <Settings
         user={user}
+        userProfile={userProfile}
         setActivePage={setActivePage}
         largeTextEnabled={largeTextEnabled}
         setLargeTextEnabled={setLargeTextEnabled}
@@ -5321,7 +5374,13 @@ export default function App() {
         setHighContrastEnabled={setHighContrastEnabled}
       />
     ),
-    measurements: <Measurements user={user} setActivePage={setActivePage} />,
+    measurements: (
+      <Measurements
+        user={user}
+        userProfile={userProfile}
+        setActivePage={setActivePage}
+      />
+    ),
   };
 
   return (
