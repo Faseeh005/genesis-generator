@@ -1,28 +1,61 @@
+// ══════════════════════════════════════════════════════════════════════════════
 // BIOMETRIC AUTHENTICATION SERVICE
+// ══════════════════════════════════════════════════════════════════════════════
+//
+// This service handles Face ID / Touch ID / Fingerprint authentication.
+// It safely handles cases where the native plugin isn't available.
+//
+// ══════════════════════════════════════════════════════════════════════════════
 
 import { Capacitor } from "@capacitor/core";
-import { NativeBiometric } from "capacitor-native-biometric";
+
+// Lazy load the biometric plugin to prevent app crash
+let NativeBiometric = null;
+
+const loadBiometricPlugin = async () => {
+  if (NativeBiometric) return NativeBiometric;
+
+  try {
+    const module = await import("capacitor-native-biometric");
+    NativeBiometric = module.NativeBiometric;
+    return NativeBiometric;
+  } catch (error) {
+    console.warn("Biometric plugin not available:", error);
+    return null;
+  }
+};
 
 const SERVER_ID = "com.medfithealth.app";
 
-// Check if running on native platform
+/**
+ * Check if running on native platform
+ */
 export const isNativePlatform = () => {
   return Capacitor.isNativePlatform();
 };
 
-// Check if biometric authentication is available
+/**
+ * Check if biometric authentication is available
+ */
 export const isBiometricAvailable = async () => {
   if (!isNativePlatform()) {
     return { isAvailable: false, biometryType: "none" };
   }
 
   try {
-    const result = await NativeBiometric.isAvailable();
+    const plugin = await loadBiometricPlugin();
+    if (!plugin) {
+      return { isAvailable: false, biometryType: "none" };
+    }
+
+    const result = await plugin.isAvailable();
 
     let biometryTypeName = "Biometric";
     if (result.biometryType === 1) biometryTypeName = "Touch ID";
     else if (result.biometryType === 2) biometryTypeName = "Face ID";
     else if (result.biometryType === 3) biometryTypeName = "Fingerprint";
+    else if (result.biometryType === 4)
+      biometryTypeName = "Face Authentication";
 
     return {
       isAvailable: result.isAvailable,
@@ -34,16 +67,22 @@ export const isBiometricAvailable = async () => {
   }
 };
 
-// Save credentials securely
+/**
+ * Save credentials securely
+ */
 export const saveCredentials = async (email, password) => {
   if (!isNativePlatform()) return false;
 
   try {
-    await NativeBiometric.setCredentials({
+    const plugin = await loadBiometricPlugin();
+    if (!plugin) return false;
+
+    await plugin.setCredentials({
       username: email,
       password: password,
       server: SERVER_ID,
     });
+    console.log("✅ Credentials saved");
     return true;
   } catch (error) {
     console.error("Save credentials error:", error);
@@ -51,21 +90,29 @@ export const saveCredentials = async (email, password) => {
   }
 };
 
-// Check if credentials exist
+/**
+ * Check if credentials exist
+ */
 export const hasStoredCredentials = async () => {
   if (!isNativePlatform()) return false;
 
   try {
-    const credentials = await NativeBiometric.getCredentials({
+    const plugin = await loadBiometricPlugin();
+    if (!plugin) return false;
+
+    const credentials = await plugin.getCredentials({
       server: SERVER_ID,
     });
     return !!(credentials?.username && credentials?.password);
   } catch (error) {
+    // No credentials stored - this is normal, not an error
     return false;
   }
 };
 
-// Authenticate with biometric and get credentials
+/**
+ * Authenticate with biometric and get credentials
+ */
 export const authenticateWithBiometric = async (
   reason = "Log in to MedFit Health",
 ) => {
@@ -74,7 +121,12 @@ export const authenticateWithBiometric = async (
   }
 
   try {
-    await NativeBiometric.verifyIdentity({
+    const plugin = await loadBiometricPlugin();
+    if (!plugin) {
+      return { success: false, error: "Biometric not available" };
+    }
+
+    await plugin.verifyIdentity({
       reason: reason,
       title: "MedFit Health",
       subtitle: "Log in with biometrics",
@@ -82,7 +134,7 @@ export const authenticateWithBiometric = async (
       fallbackTitle: "Use Passcode",
     });
 
-    const credentials = await NativeBiometric.getCredentials({
+    const credentials = await plugin.getCredentials({
       server: SERVER_ID,
     });
 
@@ -100,12 +152,18 @@ export const authenticateWithBiometric = async (
   }
 };
 
-// Delete stored credentials
+/**
+ * Delete stored credentials
+ */
 export const deleteCredentials = async () => {
   if (!isNativePlatform()) return false;
 
   try {
-    await NativeBiometric.deleteCredentials({ server: SERVER_ID });
+    const plugin = await loadBiometricPlugin();
+    if (!plugin) return false;
+
+    await plugin.deleteCredentials({ server: SERVER_ID });
+    console.log("✅ Credentials deleted");
     return true;
   } catch (error) {
     console.error("Delete credentials error:", error);

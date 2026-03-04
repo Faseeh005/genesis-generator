@@ -456,7 +456,7 @@ function Auth({ user, setUser }) {
              ═══════════════════════════════════════════════════════════════════ */
           <form onSubmit={handleAuth}>
             {/* Biometric login button */}
-            {biometricAvailable && hasSavedCredentials && !isSignUp && (
+            {/* {biometricAvailable && hasSavedCredentials && !isSignUp && (
               <div style={{ marginBottom: 20 }}>
                 <button
                   type="button"
@@ -506,7 +506,7 @@ function Auth({ user, setUser }) {
                   <div style={{ flex: 1, height: 1, background: "#e2e8f0" }} />
                 </div>
               </div>
-            )}
+            )} */}
 
             {/* Email field */}
             <div className="auth-field">
