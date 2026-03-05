@@ -4,69 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { database } from "./firebase";
 import { ref, onValue } from "firebase/database";
 
-// Import speak function from parent App component
-// We'll pass it via props instead
-
-const speak = (text, isEnabled) => {
-  if (!isEnabled || !text?.trim()) return;
-
-  if (!window.speechSynthesis) {
-    console.warn("Speech synthesis not supported");
-    return;
-  }
-
-  const synth = window.speechSynthesis;
-  const voices = synth.getVoices?.() || [];
-
-  const speakNow = () => {
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 1.0;
-    utterance.pitch = 1.0;
-    utterance.volume = 1.0;
-
-    const preferredVoice =
-      voices.find((v) => v.lang?.startsWith("en-GB")) ||
-      voices.find((v) => v.lang?.startsWith("en")) ||
-      voices[0] ||
-      null;
-
-    if (preferredVoice) {
-      utterance.voice = preferredVoice;
-      utterance.lang = preferredVoice.lang || "en-US";
-    } else {
-      utterance.lang = "en-US";
-    }
-
-    utterance.onerror = (e) =>
-      console.error("Speech error:", e?.error || e);
-
-    synth.speak(utterance);
-  };
-
-  synth.resume();
-  synth.cancel();
-
-  if (voices.length > 0) {
-    window.setTimeout(speakNow, 120);
-    return;
-  }
-
-  let handled = false;
-  const onVoicesReady = () => {
-    if (handled) return;
-    handled = true;
-    synth.removeEventListener("voiceschanged", onVoicesReady);
-    window.setTimeout(speakNow, 120);
-  };
-
-  synth.addEventListener("voiceschanged", onVoicesReady);
-  window.setTimeout(() => {
-    if (handled) return;
-    handled = true;
-    synth.removeEventListener("voiceschanged", onVoicesReady);
-    window.setTimeout(speakNow, 120);
-  }, 1500);
-};
+// Speech is provided by App.jsx through props to keep one stable implementation
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Chat Component Function
@@ -75,7 +13,7 @@ const speak = (text, isEnabled) => {
 //   - setActivePage: function to navigate to other pages
 // ──────────────────────────────────────────────────────────────────────────────
 
-function Chat({ user, setActivePage, voiceEnabled, setVoiceEnabled }) {
+function Chat({ user, setActivePage, voiceEnabled, setVoiceEnabled, onSpeak, onStopSpeech }) {
   // messages - array of all chat messages (user and assistant)
   // Starts with a welcome message from the assistant
   const [messages, setMessages] = useState([
@@ -647,7 +585,7 @@ function Chat({ user, setActivePage, voiceEnabled, setVoiceEnabled }) {
         .replace(/•/g, ""); // Remove bullet points
 
       // Speak the response
-      speak(cleanText, voiceEnabled);
+      onSpeak?.(cleanText, voiceEnabled);
 
       // Clear loading state
       setLoading(false);
@@ -701,12 +639,12 @@ function Chat({ user, setActivePage, voiceEnabled, setVoiceEnabled }) {
           // Stop playing any speech
           if (!newVoiceState) {
             // If turning voice OFF stop all speech
-            window.speechSynthesis.cancel();
+            onStopSpeech?.();
           }
 
           // Announce the change only if turning ON
           if (newVoiceState) {
-            speak("Voice assistance enabled", newVoiceState);
+            onSpeak?.("Voice assistance enabled", newVoiceState);
           }
         }}
       >

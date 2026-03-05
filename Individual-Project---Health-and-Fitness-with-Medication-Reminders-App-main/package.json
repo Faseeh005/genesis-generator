@@ -9,6 +9,7 @@
     "@capacitor/cli": "^8.1.0",
     "@capacitor/core": "^8.1.0",
     "@capacitor/ios": "^8.1.0",
+    "@capacitor-community/text-to-speech": "^6.0.1",
     "@capgo/capacitor-native-biometric": "^8.4.2",
     "@google/generative-ai": "^0.24.1",
     "@huggingface/inference": "^4.13.12",

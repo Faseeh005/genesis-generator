@@ -46,9 +46,19 @@ import {
 
 const speechState = { initialized: false, unlockBound: false };
 
+const hasWebSpeechSupport = () =>
+  typeof window !== "undefined" &&
+  "speechSynthesis" in window &&
+  typeof window.SpeechSynthesisUtterance !== "undefined";
+
 const getAvailableVoices = () => {
-  if (!window.speechSynthesis) return [];
-  return window.speechSynthesis.getVoices() || [];
+  if (!hasWebSpeechSupport()) return [];
+  try {
+    return window.speechSynthesis.getVoices() || [];
+  } catch (error) {
+    console.warn("Unable to read voices:", error);
+    return [];
+  }
 };
 
 const pickPreferredVoice = (voices) => {
@@ -67,7 +77,7 @@ const pickPreferredVoice = (voices) => {
 };
 
 const initSpeechEngine = () => {
-  if (speechState.initialized || !window.speechSynthesis) return;
+  if (speechState.initialized || !hasWebSpeechSupport()) return;
 
   speechState.initialized = true;
   const synth = window.speechSynthesis;
@@ -81,13 +91,13 @@ const initSpeechEngine = () => {
   };
 
   warmVoices();
-  synth.addEventListener("voiceschanged", warmVoices);
+  synth.addEventListener?.("voiceschanged", warmVoices);
 
   if (!speechState.unlockBound) {
     speechState.unlockBound = true;
     const unlock = () => {
       try {
-        synth.resume();
+        synth.resume?.();
         warmVoices();
       } catch (error) {
         console.warn("Speech engine unlock failed:", error);
@@ -103,10 +113,31 @@ const initSpeechEngine = () => {
   }
 };
 
-const speak = (text, isEnabled) => {
-  if (!isEnabled || !text?.trim()) return;
+const getNativeTtsPlugin = () => {
+  if (typeof window === "undefined") return null;
+  const capacitor = window.Capacitor;
+  if (!capacitor?.isNativePlatform?.()) return null;
+  return capacitor.Plugins?.TextToSpeech || null;
+};
 
-  if (typeof window === "undefined" || !window.speechSynthesis) {
+const stopSpeech = () => {
+  const nativeTts = getNativeTtsPlugin();
+  if (nativeTts?.stop) {
+    Promise.resolve(nativeTts.stop()).catch((error) => {
+      console.warn("Failed to stop native speech:", error);
+    });
+  }
+
+  if (!hasWebSpeechSupport()) return;
+  try {
+    window.speechSynthesis.cancel();
+  } catch (error) {
+    console.warn("Failed to stop speech:", error);
+  }
+};
+
+const speakWithWebSpeech = (text) => {
+  if (!hasWebSpeechSupport()) {
     console.warn("Speech synthesis not supported in this browser");
     return;
   }
@@ -115,7 +146,7 @@ const speak = (text, isEnabled) => {
   const synth = window.speechSynthesis;
 
   const runUtterance = () => {
-    const utterance = new SpeechSynthesisUtterance(text);
+    const utterance = new SpeechSynthesisUtterance(text.trim());
     utterance.rate = 1.0;
     utterance.pitch = 1.0;
     utterance.volume = 1.0;
@@ -132,40 +163,67 @@ const speak = (text, isEnabled) => {
       console.error("Speech synthesis error:", event?.error || event);
     };
 
-    synth.speak(utterance);
+    try {
+      if (synth.speaking || synth.pending) {
+        synth.cancel();
+      }
+      window.setTimeout(() => synth.speak(utterance), 100);
+    } catch (error) {
+      console.error("Failed to play speech:", error);
+    }
   };
 
-  try {
-    synth.resume();
-    synth.cancel();
-
-    window.setTimeout(() => {
-      const voices = getAvailableVoices();
-      if (voices.length > 0) {
-        runUtterance();
-        return;
-      }
-
-      let handled = false;
-      const onVoicesReady = () => {
-        if (handled) return;
-        handled = true;
-        synth.removeEventListener("voiceschanged", onVoicesReady);
-        runUtterance();
-      };
-
-      synth.addEventListener("voiceschanged", onVoicesReady);
-
-      window.setTimeout(() => {
-        if (handled) return;
-        handled = true;
-        synth.removeEventListener("voiceschanged", onVoicesReady);
-        runUtterance();
-      }, 1500);
-    }, 120);
-  } catch (error) {
-    console.error("Failed to play speech:", error);
+  const voices = getAvailableVoices();
+  if (voices.length > 0) {
+    runUtterance();
+    return;
   }
+
+  let handled = false;
+  const onVoicesReady = () => {
+    if (handled) return;
+    handled = true;
+    synth.removeEventListener("voiceschanged", onVoicesReady);
+    runUtterance();
+  };
+
+  synth.addEventListener("voiceschanged", onVoicesReady);
+
+  window.setTimeout(() => {
+    if (handled) return;
+    handled = true;
+    synth.removeEventListener("voiceschanged", onVoicesReady);
+    runUtterance();
+  }, 1500);
+};
+
+const speak = (text, isEnabled = true) => {
+  if (!isEnabled || !text?.trim()) return;
+
+  const nativeTts = getNativeTtsPlugin();
+  if (nativeTts?.speak) {
+    Promise.resolve(nativeTts.stop?.())
+      .catch(() => {
+        // no-op
+      })
+      .finally(() =>
+        Promise.resolve(
+          nativeTts.speak({
+            text: text.trim(),
+            lang: "en-GB",
+            rate: 1.0,
+            pitch: 1.0,
+            volume: 1.0,
+          }),
+        ).catch((error) => {
+          console.warn("Native TTS failed, falling back to Web Speech:", error);
+          speakWithWebSpeech(text);
+        }),
+      );
+    return;
+  }
+
+  speakWithWebSpeech(text);
 };
 
 // Function for Measurements page
@@ -2904,7 +2962,7 @@ function Medications({
               // IMMEDIATELY STOP ANY PLAYING SPEECH
               if (!newVoiceState) {
                 // If turning voice OFF, immediately stop all speech
-                window.speechSynthesis.cancel();
+                stopSpeech();
               }
 
               // Announce the change (only if turning ON)
@@ -3392,35 +3450,7 @@ function FitnessPage({ user, userProfile, setActivePage, voiceEnabled }) {
 
   const displayName = getUserDisplayName(user, userProfile);
 
-  // Speak function uses browser's speech synthesis to read text aloud
-  const speak = (text, enabled = true) => {
-    if (!enabled || !text?.trim() || !window.speechSynthesis) return;
-
-    const synth = window.speechSynthesis;
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 0.9;
-    utterance.pitch = 1.0;
-    utterance.volume = 1.0;
-
-    const voices = synth.getVoices?.() || [];
-    const englishVoice =
-      voices.find((v) => v.lang?.startsWith("en")) || voices[0] || null;
-
-    if (englishVoice) {
-      utterance.voice = englishVoice;
-      utterance.lang = englishVoice.lang || "en-US";
-    } else {
-      utterance.lang = "en-US";
-    }
-
-    utterance.onerror = (event) => {
-      console.error("Fitness speech error:", event?.error || event);
-    };
-
-    synth.resume();
-    synth.cancel();
-    window.setTimeout(() => synth.speak(utterance), 120);
-  };
+  // Use shared speech utility for consistent behavior across all pages
 
   // Get today's date
   const today = new Date().toISOString().split("T")[0];
@@ -4676,13 +4706,7 @@ function HealthProfile({ user, medications, setActivePage, voiceEnabled }) {
 
   // Read Profile Aloud Function
   const readProfileAloud = () => {
-    if (!window.speechSynthesis) {
-      alert("Speech synthesis not supported in this browser");
-      return;
-    }
-
-    // Cancel any currently speaking text
-    window.speechSynthesis.cancel();
+    stopSpeech();
 
     // Build the message
     let message = `Health Profile for ${profile.fullName || userName}. `;
@@ -6865,6 +6889,8 @@ export default function App() {
         setActivePage={setActivePage}
         voiceEnabled={voiceEnabled}
         setVoiceEnabled={setVoiceEnabled}
+        onSpeak={speak}
+        onStopSpeech={stopSpeech}
       />
     ),
     profile: (
