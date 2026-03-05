@@ -6524,12 +6524,12 @@ export default function App() {
     try {
       const stored = localStorage.getItem("medfit_voiceEnabled");
       return stored === null ? true : stored === "true";
-    } catch { return true; }
+    } catch (e) { return true; }
   });
 
   // Persist voice setting whenever it changes
   React.useEffect(() => {
-    try { localStorage.setItem("medfit_voiceEnabled", String(voiceEnabled)); } catch {}
+    try { localStorage.setItem("medfit_voiceEnabled", String(voiceEnabled)); } catch (e) {}
   }, [voiceEnabled]);
 
   // useVoice hook for clean TTS access

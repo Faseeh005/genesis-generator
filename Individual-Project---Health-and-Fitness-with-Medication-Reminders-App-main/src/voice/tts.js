@@ -33,7 +33,7 @@ const getNativePlugin = async () => {
     } else {
       console.warn("[TTS] Native TextToSpeech plugin not found on Capacitor bridge");
     }
-  } catch {
+  } catch (e) {
     console.log("[TTS] Native plugin unavailable, will use Web Speech API");
   }
 
