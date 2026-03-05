@@ -1,7 +1,8 @@
 // React and hooks - the foundation of our React app
 import React, { useState, useEffect, useRef } from "react";
 
-// CSS imported from main.tsx
+// Import CSS styles
+import "./App.css";
 
 // Firebase imports - for database and authentication
 import { database, auth } from "./firebase";
