@@ -59,7 +59,7 @@ const loadBiometricPlugin = async () => {
   if (!isNative()) return null;
 
   try {
-    const module = await import("capacitor-native-biometric");
+    const module = await import(/* @vite-ignore */ "capacitor-native-biometric");
     biometricPlugin = module.NativeBiometric;
     return biometricPlugin;
   } catch (error) {
@@ -178,13 +178,13 @@ const loadHealthPlugin = async () => {
 
   try {
     if (isIOS()) {
-      const module = await import("capacitor-health");
+      const module = await import(/* @vite-ignore */ "capacitor-health");
       healthPlugin = module.CapacitorHealthkit;
     } else if (isAndroid()) {
       // For Android, we'll use Health Connect
       // This requires the capacitor-health plugin to support Health Connect
       // or a separate plugin like @AhsanAyaz/capacitor-health-connect
-      const module = await import("capacitor-health");
+      const module = await import(/* @vite-ignore */ "capacitor-health");
       healthPlugin = module.CapacitorHealthkit;
     }
     return healthPlugin;
