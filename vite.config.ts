@@ -15,6 +15,11 @@ export default defineConfig(({ mode }) => ({
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
   resolve: {
     alias: {
+      "capacitor-native-biometric": path.resolve(
+        __dirname,
+        "./src/shims/capacitor-native-biometric.ts",
+      ),
+      "capacitor-health": path.resolve(__dirname, "./src/shims/capacitor-health.ts"),
       "@": path.resolve(__dirname, "./src"),
     },
   },

@@ -52,7 +52,7 @@ const initHealth = async () => {
   try {
     // Dynamic import - this loads the plugin code only when this function runs
     // The 'capacitor-health' package provides the CapacitorHealthkit object
-    const module = await import("capacitor-health");
+    const module = await import(/* @vite-ignore */ "capacitor-health");
 
     // Store the plugin in our variable for later use
     CapacitorHealthkit = module.CapacitorHealthkit;
