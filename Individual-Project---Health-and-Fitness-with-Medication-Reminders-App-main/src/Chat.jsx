@@ -8,23 +8,64 @@ import { ref, onValue } from "firebase/database";
 // We'll pass it via props instead
 
 const speak = (text, isEnabled) => {
-  if (!isEnabled) return;
-  // Check if browser supports speech synthesis
+  if (!isEnabled || !text?.trim()) return;
+
   if (!window.speechSynthesis) {
     console.warn("Speech synthesis not supported");
     return;
   }
-  // Cancel any currently playing speech
-  window.speechSynthesis.cancel();
-  // Create new speech utterance
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.rate = 1.0;
-  utterance.pitch = 1.0;
-  utterance.volume = 1.0;
-  utterance.lang = "en-GB";
-  utterance.onerror = (e) => console.error("Speech error:", e);
-  // Speak the text
-  window.speechSynthesis.speak(utterance);
+
+  const synth = window.speechSynthesis;
+  const voices = synth.getVoices?.() || [];
+
+  const speakNow = () => {
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
+    utterance.volume = 1.0;
+
+    const preferredVoice =
+      voices.find((v) => v.lang?.startsWith("en-GB")) ||
+      voices.find((v) => v.lang?.startsWith("en")) ||
+      voices[0] ||
+      null;
+
+    if (preferredVoice) {
+      utterance.voice = preferredVoice;
+      utterance.lang = preferredVoice.lang || "en-US";
+    } else {
+      utterance.lang = "en-US";
+    }
+
+    utterance.onerror = (e) =>
+      console.error("Speech error:", e?.error || e);
+
+    synth.speak(utterance);
+  };
+
+  synth.resume();
+  synth.cancel();
+
+  if (voices.length > 0) {
+    window.setTimeout(speakNow, 120);
+    return;
+  }
+
+  let handled = false;
+  const onVoicesReady = () => {
+    if (handled) return;
+    handled = true;
+    synth.removeEventListener("voiceschanged", onVoicesReady);
+    window.setTimeout(speakNow, 120);
+  };
+
+  synth.addEventListener("voiceschanged", onVoicesReady);
+  window.setTimeout(() => {
+    if (handled) return;
+    handled = true;
+    synth.removeEventListener("voiceschanged", onVoicesReady);
+    window.setTimeout(speakNow, 120);
+  }, 1500);
 };
 
 // ──────────────────────────────────────────────────────────────────────────────

@@ -44,66 +44,127 @@ import {
 // This function converts text to speech using the Web Speech API
 // Built into all modern browsers - no libraries needed!
 
-const speak = (text, isEnabled) => {
-  // If voice is disabled, don't speak
-  if (!isEnabled) return;
+const speechState = { initialized: false, unlockBound: false };
 
-  // Check if browser supports speech synthesis
-  if (!window.speechSynthesis) {
+const getAvailableVoices = () => {
+  if (!window.speechSynthesis) return [];
+  return window.speechSynthesis.getVoices() || [];
+};
+
+const pickPreferredVoice = (voices) => {
+  if (!voices.length) return null;
+
+  return (
+    voices.find(
+      (v) =>
+        v.lang?.startsWith("en") &&
+        /natural|enhanced|premium|neural/i.test(v.name),
+    ) ||
+    voices.find((v) => v.lang?.startsWith("en-GB")) ||
+    voices.find((v) => v.lang?.startsWith("en")) ||
+    voices[0]
+  );
+};
+
+const initSpeechEngine = () => {
+  if (speechState.initialized || !window.speechSynthesis) return;
+
+  speechState.initialized = true;
+  const synth = window.speechSynthesis;
+
+  const warmVoices = () => {
+    try {
+      synth.getVoices();
+    } catch (error) {
+      console.warn("Voice warm-up failed:", error);
+    }
+  };
+
+  warmVoices();
+  synth.addEventListener("voiceschanged", warmVoices);
+
+  if (!speechState.unlockBound) {
+    speechState.unlockBound = true;
+    const unlock = () => {
+      try {
+        synth.resume();
+        warmVoices();
+      } catch (error) {
+        console.warn("Speech engine unlock failed:", error);
+      }
+    };
+
+    document.addEventListener("click", unlock, { once: true, passive: true });
+    document.addEventListener("touchstart", unlock, {
+      once: true,
+      passive: true,
+    });
+    document.addEventListener("keydown", unlock, { once: true });
+  }
+};
+
+const speak = (text, isEnabled) => {
+  if (!isEnabled || !text?.trim()) return;
+
+  if (typeof window === "undefined" || !window.speechSynthesis) {
     console.warn("Speech synthesis not supported in this browser");
     return;
   }
 
-  // Cancel any currently speaking text to avoid overlapping
-  window.speechSynthesis.cancel();
+  initSpeechEngine();
+  const synth = window.speechSynthesis;
 
-  // Helper to actually speak once we have a voice
-  const doSpeak = (voice) => {
+  const runUtterance = () => {
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.rate = 1.0;
     utterance.pitch = 1.0;
     utterance.volume = 1.0;
-    utterance.lang = "en-GB";
-    if (voice) utterance.voice = voice;
+
+    const voice = pickPreferredVoice(getAvailableVoices());
+    if (voice) {
+      utterance.voice = voice;
+      utterance.lang = voice.lang || "en-US";
+    } else {
+      utterance.lang = "en-US";
+    }
 
     utterance.onerror = (event) => {
-      console.error("Speech synthesis error:", event);
+      console.error("Speech synthesis error:", event?.error || event);
     };
 
-    window.speechSynthesis.speak(utterance);
+    synth.speak(utterance);
   };
 
-  // Try to find a good English voice
-  const pickVoice = () => {
-    const voices = window.speechSynthesis.getVoices();
-    if (!voices || voices.length === 0) return null;
-    // Prefer a natural/enhanced English voice
-    const preferred = voices.find(
-      (v) => v.lang.startsWith("en") && /natural|enhanced|premium|neural/i.test(v.name)
-    );
-    if (preferred) return preferred;
-    // Fallback: any English voice
-    const english = voices.find((v) => v.lang.startsWith("en"));
-    return english || voices[0];
-  };
+  try {
+    synth.resume();
+    synth.cancel();
 
-  // On Android Chrome, voices load asynchronously
-  const voices = window.speechSynthesis.getVoices();
-  if (voices && voices.length > 0) {
-    doSpeak(pickVoice());
-  } else {
-    // Wait for voices to load then speak
-    const onVoicesReady = () => {
-      window.speechSynthesis.removeEventListener("voiceschanged", onVoicesReady);
-      doSpeak(pickVoice());
-    };
-    window.speechSynthesis.addEventListener("voiceschanged", onVoicesReady);
-    // Fallback timeout: speak without voice selection after 500ms
-    setTimeout(() => {
-      window.speechSynthesis.removeEventListener("voiceschanged", onVoicesReady);
-      if (window.speechSynthesis.speaking) return;
-      doSpeak(null);
-    }, 500);
+    window.setTimeout(() => {
+      const voices = getAvailableVoices();
+      if (voices.length > 0) {
+        runUtterance();
+        return;
+      }
+
+      let handled = false;
+      const onVoicesReady = () => {
+        if (handled) return;
+        handled = true;
+        synth.removeEventListener("voiceschanged", onVoicesReady);
+        runUtterance();
+      };
+
+      synth.addEventListener("voiceschanged", onVoicesReady);
+
+      window.setTimeout(() => {
+        if (handled) return;
+        handled = true;
+        synth.removeEventListener("voiceschanged", onVoicesReady);
+        runUtterance();
+      }, 1500);
+    }, 120);
+  } catch (error) {
+    console.error("Failed to play speech:", error);
   }
 };
 
@@ -3333,20 +3394,32 @@ function FitnessPage({ user, userProfile, setActivePage, voiceEnabled }) {
 
   // Speak function uses browser's speech synthesis to read text aloud
   const speak = (text, enabled = true) => {
-    // Only speak if voice is enabled and speech synthesis is available
-    if (!enabled || !window.speechSynthesis) return;
+    if (!enabled || !text?.trim() || !window.speechSynthesis) return;
 
-    // Cancel any currently speaking text
-    window.speechSynthesis.cancel();
-
-    // Create new utterance
+    const synth = window.speechSynthesis;
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 0.9; // Slightly slower for clarity
+    utterance.rate = 0.9;
     utterance.pitch = 1.0;
-    utterance.lang = "en-GB";
+    utterance.volume = 1.0;
 
-    // Speak the text
-    window.speechSynthesis.speak(utterance);
+    const voices = synth.getVoices?.() || [];
+    const englishVoice =
+      voices.find((v) => v.lang?.startsWith("en")) || voices[0] || null;
+
+    if (englishVoice) {
+      utterance.voice = englishVoice;
+      utterance.lang = englishVoice.lang || "en-US";
+    } else {
+      utterance.lang = "en-US";
+    }
+
+    utterance.onerror = (event) => {
+      console.error("Fitness speech error:", event?.error || event);
+    };
+
+    synth.resume();
+    synth.cancel();
+    window.setTimeout(() => synth.speak(utterance), 120);
   };
 
   // Get today's date
@@ -3778,26 +3851,10 @@ function FitnessPage({ user, userProfile, setActivePage, voiceEnabled }) {
   // Reads the exercise instructions aloud using text-to-speech
 
   const speakInstructions = (exercise) => {
-    // Check if speech synthesis is supported
-    if (!window.speechSynthesis) {
-      alert("Speech not supported in this browser");
-      return;
-    }
+    if (!exercise) return;
 
-    // Cancel any current speech
-    window.speechSynthesis.cancel();
-
-    // Build the message to speak
     const message = `${exercise.name}. ${exercise.instructions}`;
-
-    // Create speech utterance
-    const utterance = new SpeechSynthesisUtterance(message);
-    utterance.rate = 0.85; // Slightly slower for clarity
-    utterance.pitch = 1.0;
-    utterance.lang = "en-GB";
-
-    // Speak the message
-    window.speechSynthesis.speak(utterance);
+    speak(message, voiceEnabled);
   };
 
   // Get Workout Icon Helper Function
@@ -4680,18 +4737,7 @@ function HealthProfile({ user, medications, setActivePage, voiceEnabled }) {
     message += `Account created: ${createdMonth}. `;
     message += `Total medications tracked: ${medications.length}. `;
 
-    // Create and speak the utterance
-    const utterance = new SpeechSynthesisUtterance(message);
-    utterance.rate = 0.9; // Slightly slower for clarity
-    utterance.pitch = 1.0;
-    utterance.volume = 1.0;
-    utterance.lang = "en-GB";
-
-    utterance.onerror = (event) => {
-      console.error("Speech synthesis error:", event);
-    };
-
-    window.speechSynthesis.speak(utterance);
+    speak(message, voiceEnabled);
   };
 
   // Load Profile Data Effect
@@ -6804,7 +6850,14 @@ export default function App() {
         setVoiceEnabled={setVoiceEnabled}
       />
     ),
-    fitness: <FitnessPage user={user} setActivePage={setActivePage} />,
+    fitness: (
+      <FitnessPage
+        user={user}
+        userProfile={userProfile}
+        setActivePage={setActivePage}
+        voiceEnabled={voiceEnabled}
+      />
+    ),
     chat: (
       <Chat
         user={user}
