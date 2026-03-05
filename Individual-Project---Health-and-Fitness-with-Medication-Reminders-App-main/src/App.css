@@ -4471,14 +4471,14 @@ body,
   }
 
   .notifications-dropdown {
-    position: fixed !important;
-    left: 12px !important;
-    right: 12px !important;
-    top: 12px !important;
-    bottom: 12px !important;
-    width: auto !important;
-    max-width: none !important;
-    max-height: none !important;
+    position: absolute !important;
+    top: calc(100% + 8px) !important;
+    right: 0 !important;
+    left: auto !important;
+    bottom: auto !important;
+    width: calc(100vw - 24px) !important;
+    max-width: 360px !important;
+    max-height: 70vh !important;
     z-index: 10010 !important;
   }
 

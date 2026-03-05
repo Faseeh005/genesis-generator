@@ -56,27 +56,59 @@ const speak = (text, isEnabled) => {
   // Cancel any currently speaking text to avoid overlapping
   window.speechSynthesis.cancel();
 
-  // Create a new speech utterance (the text to be spoken)
-  const utterance = new SpeechSynthesisUtterance(text);
+  // Helper to actually speak once we have a voice
+  const doSpeak = (voice) => {
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
+    utterance.volume = 1.0;
+    utterance.lang = "en-GB";
+    if (voice) utterance.voice = voice;
 
-  // Configure speech properties
-  utterance.rate = 1.0; // Speed: 1.0 = normal, 0.5 = slow, 2.0 = fast
-  utterance.pitch = 1.0; // Pitch: 1.0 = normal, 0.5 = low, 2.0 = high
-  utterance.volume = 1.0; // Volume: 0.0 to 1.0 (max)
-  utterance.lang = "en-GB"; // British English accent
+    utterance.onerror = (event) => {
+      console.error("Speech synthesis error:", event);
+    };
 
-  // Error handling
-  utterance.onerror = (event) => {
-    console.error("Speech synthesis error:", event);
+    window.speechSynthesis.speak(utterance);
   };
 
-  // Speak the text!
-  window.speechSynthesis.speak(utterance);
+  // Try to find a good English voice
+  const pickVoice = () => {
+    const voices = window.speechSynthesis.getVoices();
+    if (!voices || voices.length === 0) return null;
+    // Prefer a natural/enhanced English voice
+    const preferred = voices.find(
+      (v) => v.lang.startsWith("en") && /natural|enhanced|premium|neural/i.test(v.name)
+    );
+    if (preferred) return preferred;
+    // Fallback: any English voice
+    const english = voices.find((v) => v.lang.startsWith("en"));
+    return english || voices[0];
+  };
+
+  // On Android Chrome, voices load asynchronously
+  const voices = window.speechSynthesis.getVoices();
+  if (voices && voices.length > 0) {
+    doSpeak(pickVoice());
+  } else {
+    // Wait for voices to load then speak
+    const onVoicesReady = () => {
+      window.speechSynthesis.removeEventListener("voiceschanged", onVoicesReady);
+      doSpeak(pickVoice());
+    };
+    window.speechSynthesis.addEventListener("voiceschanged", onVoicesReady);
+    // Fallback timeout: speak without voice selection after 500ms
+    setTimeout(() => {
+      window.speechSynthesis.removeEventListener("voiceschanged", onVoicesReady);
+      if (window.speechSynthesis.speaking) return;
+      doSpeak(null);
+    }, 500);
+  }
 };
 
 // Function for Measurements page
-function Measurements({ user, setActivePage }) {
-  const [activeTab, setActiveTab] = useState("log");
+function Measurements({ user, setActivePage, initialTab }) {
+  const [activeTab, setActiveTab] = useState(initialTab || "log");
   const [measurements, setMeasurements] = useState({
     systolic: "",
     diastolic: "",
@@ -2163,6 +2195,12 @@ function Dashboard({ user, userProfile, medications, setActivePage }) {
             label: "Fitness Tracker",
             sub: "Track your exercises",
             page: "fitness",
+          },
+          {
+            icon: "🔔",
+            label: "Reminders",
+            sub: "Manage your reminders",
+            page: "reminders",
           },
           {
             icon: "🤖",
@@ -6773,6 +6811,14 @@ export default function App() {
         user={user}
         userProfile={userProfile}
         setActivePage={setActivePage}
+      />
+    ),
+    reminders: (
+      <Measurements
+        user={user}
+        userProfile={userProfile}
+        setActivePage={setActivePage}
+        initialTab="reminders"
       />
     ),
   };
