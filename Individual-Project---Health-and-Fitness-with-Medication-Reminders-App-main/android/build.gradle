@@ -2,7 +2,7 @@
 
 // Patch to fix capacitor-health and other plugins using deprecated proguard-android.txt with AGP 9.1.0+
 def patchNodeModules = {
-    def plugins = ['capacitor-health', '@capgo/capacitor-native-biometric']
+    def plugins = ['capacitor-health', '@capgo/capacitor-native-biometric', '@capacitor-community/text-to-speech']
     plugins.each { plugin ->
         def buildFile = file("../node_modules/${plugin}/android/build.gradle")
         if (buildFile.exists()) {

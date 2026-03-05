@@ -5,6 +5,8 @@
  * Safe for Android WebView where speechSynthesis is unreliable.
  */
 
+import { registerPlugin } from "@capacitor/core";
+
 /* ---------- helpers ---------- */
 
 let nativePlugin = null;
@@ -19,22 +21,39 @@ const getNativePlugin = async () => {
 
     const capacitor = window.Capacitor;
     const platform = capacitor?.getPlatform?.();
-    const isNative = capacitor?.isNativePlatform?.() || platform === "android" || platform === "ios";
+    const isNative =
+      capacitor?.isNativePlatform?.() ||
+      platform === "android" ||
+      platform === "ios";
 
     if (!isNative) {
       console.log("[TTS] Running on web, using Web Speech fallback");
       return null;
     }
 
-    const plugin = capacitor?.Plugins?.TextToSpeech;
-    if (plugin && typeof plugin.speak === "function") {
-      nativePlugin = plugin;
-      console.log("[TTS] Native Capacitor plugin loaded ✅");
-    } else {
-      console.warn("[TTS] Native TextToSpeech plugin not found on Capacitor bridge");
+    const plugins = capacitor?.Plugins || {};
+    const bridgePlugin =
+      plugins.TextToSpeech ||
+      plugins.CapacitorCommunityTextToSpeech ||
+      plugins["capacitor-community-text-to-speech"];
+
+    if (bridgePlugin && typeof bridgePlugin.speak === "function") {
+      nativePlugin = bridgePlugin;
+      console.log("[TTS] Native Capacitor plugin loaded via bridge ✅");
+      return nativePlugin;
     }
+
+    if (capacitor?.isPluginAvailable?.("TextToSpeech")) {
+      nativePlugin = registerPlugin("TextToSpeech");
+      console.log("[TTS] Native Capacitor plugin loaded via registerPlugin ✅");
+      return nativePlugin;
+    }
+
+    console.error(
+      "[TTS] Native TextToSpeech plugin unavailable on device. Run: npm i @capacitor-community/text-to-speech && npx cap sync android"
+    );
   } catch (e) {
-    console.log("[TTS] Native plugin unavailable, will use Web Speech API");
+    console.error("[TTS] Native plugin unavailable, will use Web Speech API", e);
   }
 
   return nativePlugin;
