@@ -1794,7 +1794,7 @@ function Dashboard({ user, userProfile, medications, setActivePage }) {
                   >
                     <button
                       onClick={() => {
-                        setActivePage("reminders");
+                        setActivePage("measurements-reminders");
                         closeNotifications();
                       }}
                       style={{
@@ -2195,12 +2195,6 @@ function Dashboard({ user, userProfile, medications, setActivePage }) {
             label: "Fitness Tracker",
             sub: "Track your exercises",
             page: "fitness",
-          },
-          {
-            icon: "🔔",
-            label: "Reminders",
-            sub: "Manage your reminders",
-            page: "reminders",
           },
           {
             icon: "🤖",
@@ -6813,7 +6807,7 @@ export default function App() {
         setActivePage={setActivePage}
       />
     ),
-    reminders: (
+    "measurements-reminders": (
       <Measurements
         user={user}
         userProfile={userProfile}
