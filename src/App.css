@@ -524,10 +524,12 @@ body {
 /* Donut chart legend */
 .donut-legend {
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
   gap: 20px;
   font-size: 13px;
   color: #475569;
+  margin-top: 8px;
 }
 
 /* Legend colored dot */
@@ -2818,15 +2820,16 @@ body {
 
 /* Screen reader only text */
 .sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  clip-path: inset(50%) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
 }
 
 /* Reduced motion support */
@@ -4099,9 +4102,20 @@ body {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════
-   MOBILE RESPONSIVE FIXES
+   MOBILE RESPONSIVE FIXES — Android-first
    ══════════════════════════════════════════════════════════════════════════════ */
+
+/* Notifications dropdown — base (outside media query) */
+.notifications-dropdown {
+  max-width: calc(100vw - 24px);
+}
+
+.notifications-content {
+  -webkit-overflow-scrolling: touch;
+}
+
 @media (max-width: 768px) {
+  /* ── Global overflow guard ── */
   html,
   body,
   #root,
@@ -4111,7 +4125,102 @@ body {
     max-width: 100vw !important;
   }
 
-  /* Fix stats row - 2 columns on mobile */
+  /* ── Page container ── */
+  .page {
+    width: 100% !important;
+    max-width: 100vw !important;
+    overflow-x: hidden !important;
+    padding: 14px !important;
+    box-sizing: border-box !important;
+  }
+
+  /* ── Header bar ── */
+  .page-header-bar {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 8px !important;
+    padding: 8px 0 12px !important;
+    width: 100% !important;
+  }
+
+  .page-title-main {
+    font-size: 20px !important;
+    line-height: 1.2 !important;
+    word-break: break-word;
+  }
+
+  .page-subtitle {
+    font-size: 13px !important;
+    line-height: 1.35 !important;
+  }
+
+  .header-right {
+    width: 100% !important;
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    gap: 10px !important;
+    justify-content: flex-start !important;
+  }
+
+  .header-user {
+    font-size: 13px !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 160px;
+  }
+
+  .bell-btn {
+    font-size: 20px !important;
+    padding: 4px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .logout-btn {
+    font-size: 12px !important;
+    padding: 6px 10px !important;
+    flex-shrink: 0 !important;
+    white-space: nowrap;
+  }
+
+  /* ── Welcome banner ── */
+  .welcome-banner {
+    padding: 18px 16px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    margin-bottom: 16px !important;
+  }
+
+  .welcome-banner h2 {
+    font-size: 20px !important;
+  }
+
+  .welcome-banner p {
+    font-size: 13px !important;
+  }
+
+  /* ── Next med banner ── */
+  .next-med-banner {
+    padding: 14px !important;
+    flex-direction: column !important;
+    text-align: center !important;
+    gap: 8px !important;
+  }
+
+  .next-med-name {
+    font-size: 16px !important;
+  }
+
+  .countdown {
+    font-size: 22px !important;
+  }
+
+  .next-med-timer {
+    display: none !important;
+  }
+
+  /* ── Stats row ── */
   .stats-row {
     display: grid !important;
     grid-template-columns: repeat(2, 1fr) !important;
@@ -4123,30 +4232,106 @@ body {
   .stat-card-dash {
     min-width: 0 !important;
     width: 100% !important;
-    padding: 14px !important;
+    padding: 12px !important;
     flex-direction: column !important;
     text-align: center !important;
-    gap: 8px !important;
+    gap: 6px !important;
   }
 
   .stat-card-dash .stat-value-lg {
-    font-size: 22px !important;
+    font-size: 20px !important;
   }
 
   .stat-card-dash .stat-label-sm {
     font-size: 11px !important;
   }
 
-  /* Fix page container */
-  .page {
-    width: 100% !important;
-    max-width: 100vw !important;
-    overflow-x: hidden !important;
-    padding: 12px !important;
-    box-sizing: border-box !important;
+  .stat-card-dash .stat-sub {
+    font-size: 10px !important;
   }
 
-  /* Fix progress banner */
+  /* ── Cards ── */
+  .card-white {
+    padding: 14px !important;
+    margin-bottom: 14px !important;
+  }
+
+  .section-title {
+    font-size: 15px !important;
+  }
+
+  .section-title-lg {
+    font-size: 17px !important;
+  }
+
+  /* ── Water intake ── */
+  .water-row {
+    display: flex !important;
+    justify-content: space-between !important;
+    gap: 8px !important;
+  }
+
+  .water-btns {
+    flex-wrap: wrap !important;
+  }
+
+  .water-btn {
+    flex: 1 1 28% !important;
+    min-width: 70px !important;
+    padding: 8px !important;
+    font-size: 13px !important;
+  }
+
+  /* ── Charts row ── */
+  .charts-row {
+    grid-template-columns: 1fr !important;
+    gap: 14px !important;
+    width: 100% !important;
+  }
+
+  /* ── Donut chart ── */
+  .donut-wrap {
+    padding: 8px 0 !important;
+  }
+
+  .donut-svg {
+    width: 100px !important;
+    height: 100px !important;
+  }
+
+  .donut-legend {
+    gap: 16px !important;
+    font-size: 13px !important;
+  }
+
+  /* ── Quick actions grid ── */
+  .quick-actions {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px !important;
+    width: 100% !important;
+  }
+
+  .quick-action-card {
+    width: 100% !important;
+    padding: 12px !important;
+    gap: 10px !important;
+  }
+
+  .qa-icon {
+    font-size: 22px !important;
+    width: 38px !important;
+    height: 38px !important;
+  }
+
+  .qa-label {
+    font-size: 13px !important;
+  }
+
+  .qa-sub {
+    font-size: 11px !important;
+  }
+
+  /* ── Progress banner (medications page) ── */
   .progress-banner {
     flex-direction: column !important;
     align-items: flex-start !important;
@@ -4167,10 +4352,51 @@ body {
 
   .banner-pct {
     align-self: flex-end !important;
-    font-size: 36px !important;
+    font-size: 32px !important;
   }
 
-  /* Fix notification panel */
+  /* ── Medication cards ── */
+  .med-cards-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+    width: 100% !important;
+  }
+
+  .med-card {
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  /* ── Summary grid ── */
+  .summary-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px !important;
+  }
+
+  .summary-card {
+    padding: 12px !important;
+  }
+
+  .summary-value {
+    font-size: 20px !important;
+  }
+
+  /* ── Notifications dropdown ── */
+  .notifications-dropdown {
+    width: calc(100vw - 24px) !important;
+    max-width: 320px !important;
+    max-height: 70vh !important;
+    z-index: 10010 !important;
+    box-sizing: border-box !important;
+  }
+
+  .notifications-content {
+    max-height: 50vh !important;
+    overflow-y: auto !important;
+  }
+
+  /* ── Notification panel (slide-in) ── */
   .notification-panel {
     position: fixed !important;
     top: 0 !important;
@@ -4185,81 +4411,10 @@ body {
     box-shadow: -4px 0 20px rgba(0, 0, 0, 0.15) !important;
   }
 
-  /* Fix welcome banner */
-  .welcome-banner {
-    padding: 20px 16px !important;
-    width: 100% !important;
-    box-sizing: border-box !important;
-  }
-
-  .welcome-banner h2 {
-    font-size: 20px !important;
-  }
-
-  /* Fix medication cards grid */
-  .med-cards-grid {
-    grid-template-columns: 1fr !important;
-    gap: 12px !important;
-    width: 100% !important;
-  }
-
-  .med-card {
-    width: 100% !important;
-    max-width: 100% !important;
-    box-sizing: border-box !important;
-  }
-
-  /* Fix quick actions */
-  .quick-actions {
-    grid-template-columns: 1fr !important;
-    gap: 10px !important;
-    width: 100% !important;
-  }
-
-  .quick-action-card {
-    width: 100% !important;
-    padding: 14px !important;
-  }
-
-  /* Fix charts row */
-  .charts-row {
-    grid-template-columns: 1fr !important;
-    gap: 12px !important;
-    width: 100% !important;
-  }
-
-  /* Fix header */
-  .page-header-bar {
-    flex-direction: column !important;
-    align-items: flex-start !important;
-    gap: 12px !important;
-    padding: 12px 0 !important;
-    width: 100% !important;
-  }
-
-  .header-right {
-    width: 100% !important;
-    justify-content: flex-end !important;
-  }
-
-  /* Fix summary grid */
-  .summary-grid {
-    grid-template-columns: repeat(2, 1fr) !important;
-    gap: 10px !important;
-  }
-
-  .summary-card {
-    padding: 14px !important;
-  }
-
-  .summary-value {
-    font-size: 22px !important;
-  }
-
-  /* Fix modal on mobile */
+  /* ── Modals ── */
   .modal {
-    width: 95vw !important;
-    max-width: 95vw !important;
+    width: calc(100vw - 24px) !important;
+    max-width: calc(100vw - 24px) !important;
     max-height: 85vh !important;
     margin: 10px !important;
   }
@@ -4268,13 +4423,12 @@ body {
     padding: 16px !important;
   }
 
-  /* Fix form rows */
   .form-row {
     flex-direction: column !important;
     gap: 0 !important;
   }
 
-  /* Fix chat page */
+  /* ── Chat page ── */
   .chat-page {
     flex-direction: column !important;
     height: auto !important;
@@ -4300,7 +4454,7 @@ body {
     min-height: 400px !important;
   }
 
-  /* Fix profile page */
+  /* ── Profile page ── */
   .profile-grid {
     grid-template-columns: 1fr !important;
   }
@@ -4309,7 +4463,7 @@ body {
     grid-template-columns: repeat(2, 1fr) !important;
   }
 
-  /* Fix emergency page */
+  /* ── Emergency page ── */
   .emergency-services-row {
     grid-template-columns: 1fr !important;
   }
@@ -4318,20 +4472,20 @@ body {
     grid-template-columns: 1fr !important;
   }
 
-  /* Fix settings */
+  /* ── Settings ── */
   .settings-item {
     flex-wrap: wrap !important;
     gap: 10px !important;
   }
 
-  /* Fix measurements */
+  /* ── Measurements ── */
   .measurements-tabs {
     flex-wrap: wrap !important;
     gap: 8px !important;
   }
 
   .measurements-tab {
-    padding: 10px 16px !important;
+    padding: 10px 14px !important;
     font-size: 13px !important;
   }
 
@@ -4343,61 +4497,35 @@ body {
     grid-template-columns: 1fr !important;
   }
 
-  /* Fix workout cards */
+  /* ── Workout cards ── */
   .workout-cards-grid {
     grid-template-columns: 1fr !important;
   }
 
-  /* Fix steps banner */
+  /* ── Steps banner ── */
   .steps-banner {
-    padding: 20px 16px !important;
+    padding: 18px 14px !important;
     flex-direction: column !important;
     text-align: center !important;
-    gap: 12px !important;
+    gap: 10px !important;
   }
 
   .steps-value {
-    font-size: 36px !important;
+    font-size: 32px !important;
   }
 
   .steps-icon {
     display: none !important;
   }
 
-  /* Fix next med banner */
-  .next-med-banner {
-    padding: 16px !important;
-    flex-direction: column !important;
-    text-align: center !important;
-    gap: 10px !important;
-  }
-
-  .next-med-name {
-    font-size: 18px !important;
-  }
-
-  .countdown {
-    font-size: 24px !important;
-  }
-
-  /* Fix water buttons */
-  .water-btns {
-    flex-wrap: wrap !important;
-  }
-
-  .water-btn {
-    flex: 1 1 45% !important;
-    min-width: 80px !important;
-  }
-
-  /* Fix auth page */
+  /* ── Auth page ── */
   .auth-card {
     width: 95vw !important;
     max-width: 400px !important;
     padding: 24px 20px !important;
   }
 
-  /* Fix onboarding */
+  /* ── Onboarding ── */
   .onboarding-card {
     width: 95vw !important;
     max-width: 100% !important;
@@ -4417,83 +4545,15 @@ body {
   .onboarding-btn {
     width: 100% !important;
   }
-
-  .next-med-timer {
-    display: none !important;
-  }
 } /* end @media (max-width: 768px) */
-
-/* ══════════════════════════════════════════════════════════════════════════════
-   MOBILE TYPOGRAPHY + FIT FIXES (non-functional UI polish)
-   ══════════════════════════════════════════════════════════════════════════════ */
-.notifications-dropdown {
-  max-width: calc(100vw - 24px);
-}
-
-.notifications-content {
-  -webkit-overflow-scrolling: touch;
-}
-
-@media (max-width: 768px) {
-  .page-title-main {
-    font-size: clamp(1.65rem, 6vw, 2rem) !important;
-    line-height: 1.2 !important;
-    word-break: break-word;
-  }
-
-  .page-subtitle {
-    font-size: clamp(0.85rem, 3.4vw, 0.95rem) !important;
-    line-height: 1.35 !important;
-  }
-
-  .header-right {
-    justify-content: flex-end !important;
-    flex-wrap: wrap !important;
-    row-gap: 8px !important;
-    column-gap: 8px !important;
-  }
-
-  .header-user {
-    flex: 1 1 auto;
-    min-width: 0;
-    overflow-wrap: anywhere;
-    font-size: clamp(0.84rem, 3.2vw, 0.95rem) !important;
-  }
-
-  .card-white,
-  .quick-action-card,
-  .med-card,
-  .reminder-card,
-  .auth-card {
-    padding: 16px !important;
-  }
-
-  .section-title-lg {
-    font-size: clamp(1.05rem, 4.2vw, 1.25rem) !important;
-  }
-
-  .notifications-dropdown {
-    width: calc(100vw - 24px) !important;
-    max-width: 340px !important;
-    max-height: 70vh !important;
-    z-index: 10010 !important;
-    box-sizing: border-box !important;
-  }
-
-  .notifications-content {
-    max-height: 50vh !important;
-    overflow-y: auto !important;
-  }
-
-  .modal {
-    width: calc(100vw - 24px) !important;
-    max-width: calc(100vw - 24px) !important;
-  }
-}
 
 @media (max-width: 480px) {
   .stats-row,
   .summary-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .quick-actions {
     grid-template-columns: 1fr !important;
   }
 
@@ -4512,31 +4572,3 @@ body {
     width: 100%;
   }
 }
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   HOW THE TOOLTIP WORKS:
-   
-   1. USER HOVERS over a donut segment
-      → onMouseEnter fires
-      → setHoveredSegment('taken' or 'pending')
-   
-   2. COMPONENT RE-RENDERS
-      → {hoveredSegment && <div className="donut-tooltip">...}
-      → Tooltip div appears in the DOM
-   
-   3. CSS POSITIONS THE TOOLTIP
-      → position: absolute
-      → top: 50%, left: 50% (center of parent)
-      → transform: translate(-50%, -50%) (adjust for tooltip size)
-      → Result: Tooltip appears exactly in center of donut!
-   
-   4. ANIMATION PLAYS
-      → tooltipFadeIn animation runs
-      → Tooltip fades in and scales up smoothly
-   
-   5. USER MOVES MOUSE AWAY
-      → onMouseLeave fires
-      → setHoveredSegment(null)
-      → Tooltip disappears
-   
-   ═══════════════════════════════════════════════════════════════════════════ */
