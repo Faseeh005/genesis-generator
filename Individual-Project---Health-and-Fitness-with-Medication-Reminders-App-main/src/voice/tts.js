@@ -15,17 +15,25 @@ const getNativePlugin = async () => {
   nativeChecked = true;
 
   try {
-    // Dynamic import so it doesn't blow up in the browser
-    const mod = await import(/* @vite-ignore */ "@capacitor-community/text-to-speech");
-    const { TextToSpeech } = mod;
+    if (typeof window === "undefined") return null;
 
-    // Quick capability check – getSupportedLanguages only exists on native
-    if (TextToSpeech && typeof TextToSpeech.speak === "function") {
-      nativePlugin = TextToSpeech;
+    const capacitor = window.Capacitor;
+    const platform = capacitor?.getPlatform?.();
+    const isNative = capacitor?.isNativePlatform?.() || platform === "android" || platform === "ios";
+
+    if (!isNative) {
+      console.log("[TTS] Running on web, using Web Speech fallback");
+      return null;
+    }
+
+    const plugin = capacitor?.Plugins?.TextToSpeech;
+    if (plugin && typeof plugin.speak === "function") {
+      nativePlugin = plugin;
       console.log("[TTS] Native Capacitor plugin loaded ✅");
+    } else {
+      console.warn("[TTS] Native TextToSpeech plugin not found on Capacitor bridge");
     }
   } catch {
-    // Not available (running in browser or plugin not installed)
     console.log("[TTS] Native plugin unavailable, will use Web Speech API");
   }
 
