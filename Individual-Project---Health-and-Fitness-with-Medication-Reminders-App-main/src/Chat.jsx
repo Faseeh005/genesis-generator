@@ -576,16 +576,21 @@ function Chat({ user, setActivePage, voiceEnabled, setVoiceEnabled, onSpeak, onS
       // Add to messages array
       setMessages((prev) => [...prev, aiMsg]);
 
-      // Voice (read response aloud)
-      // Clean up the text for better speech
+      // Voice (read response aloud) - first 200 chars max
       const cleanText = aiContent
         .replace(/\*\*/g, "") // Remove markdown bold
         .replace(/\n\n/g, ". ") // Convert double newlines to periods
         .replace(/\n/g, ", ") // Convert single newlines to commas
-        .replace(/•/g, ""); // Remove bullet points
+        .replace(/•/g, "") // Remove bullet points
+        .replace(/[🔗📞🚨📅🩺💊🏃🥗😴💧⚠️✅❌💙🤧🤕💪🪑👟⚖️🍬🧂🦠🤰🚭🔵🟤☀️☕🧘🌬️]/g, ""); // Remove emojis
+
+      // Limit to first 200 characters to avoid reading huge messages
+      const truncated = cleanText.length > 200
+        ? cleanText.substring(0, 200).replace(/,\s*$/, "") + "."
+        : cleanText;
 
       // Speak the response
-      onSpeak?.(cleanText, voiceEnabled);
+      onSpeak?.(truncated, voiceEnabled);
 
       // Clear loading state
       setLoading(false);

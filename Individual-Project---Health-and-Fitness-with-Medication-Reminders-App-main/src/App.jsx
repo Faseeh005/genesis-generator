@@ -40,190 +40,18 @@ import {
   authenticateWithBiometric,
 } from "./biometricAuth";
 
-// VOICE ASSISTANT UTILITY FUNCTION
-// This function converts text to speech using the Web Speech API
-// Built into all modern browsers - no libraries needed!
+// VOICE: production-ready TTS using native Capacitor plugin + Web Speech fallback
+import { speak as ttsSpeak, stop as ttsStop } from "./voice/tts";
+import useVoice from "./voice/useVoice";
 
-const speechState = { initialized: false, unlockBound: false };
-
-const hasWebSpeechSupport = () =>
-  typeof window !== "undefined" &&
-  "speechSynthesis" in window &&
-  typeof window.SpeechSynthesisUtterance !== "undefined";
-
-const getAvailableVoices = () => {
-  if (!hasWebSpeechSupport()) return [];
-  try {
-    return window.speechSynthesis.getVoices() || [];
-  } catch (error) {
-    console.warn("Unable to read voices:", error);
-    return [];
-  }
-};
-
-const pickPreferredVoice = (voices) => {
-  if (!voices.length) return null;
-
-  return (
-    voices.find(
-      (v) =>
-        v.lang?.startsWith("en") &&
-        /natural|enhanced|premium|neural/i.test(v.name),
-    ) ||
-    voices.find((v) => v.lang?.startsWith("en-GB")) ||
-    voices.find((v) => v.lang?.startsWith("en")) ||
-    voices[0]
-  );
-};
-
-const initSpeechEngine = () => {
-  if (speechState.initialized || !hasWebSpeechSupport()) return;
-
-  speechState.initialized = true;
-  const synth = window.speechSynthesis;
-
-  const warmVoices = () => {
-    try {
-      synth.getVoices();
-    } catch (error) {
-      console.warn("Voice warm-up failed:", error);
-    }
-  };
-
-  warmVoices();
-  synth.addEventListener?.("voiceschanged", warmVoices);
-
-  if (!speechState.unlockBound) {
-    speechState.unlockBound = true;
-    const unlock = () => {
-      try {
-        synth.resume?.();
-        warmVoices();
-      } catch (error) {
-        console.warn("Speech engine unlock failed:", error);
-      }
-    };
-
-    document.addEventListener("click", unlock, { once: true, passive: true });
-    document.addEventListener("touchstart", unlock, {
-      once: true,
-      passive: true,
-    });
-    document.addEventListener("keydown", unlock, { once: true });
-  }
-};
-
-const getNativeTtsPlugin = () => {
-  if (typeof window === "undefined") return null;
-  const capacitor = window.Capacitor;
-  if (!capacitor?.isNativePlatform?.()) return null;
-  return capacitor.Plugins?.TextToSpeech || null;
+// Legacy-compatible wrappers used by components that receive speak/stop as props
+const speak = (text, isEnabled = true) => {
+  if (!isEnabled || !text?.trim()) return;
+  ttsSpeak(text);
 };
 
 const stopSpeech = () => {
-  const nativeTts = getNativeTtsPlugin();
-  if (nativeTts?.stop) {
-    Promise.resolve(nativeTts.stop()).catch((error) => {
-      console.warn("Failed to stop native speech:", error);
-    });
-  }
-
-  if (!hasWebSpeechSupport()) return;
-  try {
-    window.speechSynthesis.cancel();
-  } catch (error) {
-    console.warn("Failed to stop speech:", error);
-  }
-};
-
-const speakWithWebSpeech = (text) => {
-  if (!hasWebSpeechSupport()) {
-    console.warn("Speech synthesis not supported in this browser");
-    return;
-  }
-
-  initSpeechEngine();
-  const synth = window.speechSynthesis;
-
-  const runUtterance = () => {
-    const utterance = new SpeechSynthesisUtterance(text.trim());
-    utterance.rate = 1.0;
-    utterance.pitch = 1.0;
-    utterance.volume = 1.0;
-
-    const voice = pickPreferredVoice(getAvailableVoices());
-    if (voice) {
-      utterance.voice = voice;
-      utterance.lang = voice.lang || "en-US";
-    } else {
-      utterance.lang = "en-US";
-    }
-
-    utterance.onerror = (event) => {
-      console.error("Speech synthesis error:", event?.error || event);
-    };
-
-    try {
-      if (synth.speaking || synth.pending) {
-        synth.cancel();
-      }
-      window.setTimeout(() => synth.speak(utterance), 100);
-    } catch (error) {
-      console.error("Failed to play speech:", error);
-    }
-  };
-
-  const voices = getAvailableVoices();
-  if (voices.length > 0) {
-    runUtterance();
-    return;
-  }
-
-  let handled = false;
-  const onVoicesReady = () => {
-    if (handled) return;
-    handled = true;
-    synth.removeEventListener("voiceschanged", onVoicesReady);
-    runUtterance();
-  };
-
-  synth.addEventListener("voiceschanged", onVoicesReady);
-
-  window.setTimeout(() => {
-    if (handled) return;
-    handled = true;
-    synth.removeEventListener("voiceschanged", onVoicesReady);
-    runUtterance();
-  }, 1500);
-};
-
-const speak = (text, isEnabled = true) => {
-  if (!isEnabled || !text?.trim()) return;
-
-  const nativeTts = getNativeTtsPlugin();
-  if (nativeTts?.speak) {
-    Promise.resolve(nativeTts.stop?.())
-      .catch(() => {
-        // no-op
-      })
-      .finally(() =>
-        Promise.resolve(
-          nativeTts.speak({
-            text: text.trim(),
-            lang: "en-GB",
-            rate: 1.0,
-            pitch: 1.0,
-            volume: 1.0,
-          }),
-        ).catch((error) => {
-          console.warn("Native TTS failed, falling back to Web Speech:", error);
-          speakWithWebSpeech(text);
-        }),
-      );
-    return;
-  }
-
-  speakWithWebSpeech(text);
+  ttsStop();
 };
 
 // Function for Measurements page
@@ -5278,6 +5106,10 @@ function Settings({
   setLargeTextEnabled,
   highContrastEnabled,
   setHighContrastEnabled,
+  voiceEnabled,
+  setVoiceEnabled,
+  onSpeak,
+  onStopSpeech,
 }) {
   // State Variables
 
@@ -5502,6 +5334,32 @@ function Settings({
             }}
           >
             🔔 Test Notification
+          </button>
+
+          {/* Voice Toggle */}
+          <button
+            className={`settings-account-btn ${voiceEnabled ? "green-outline" : "dark"}`}
+            onClick={() => {
+              const newState = !voiceEnabled;
+              setVoiceEnabled(newState);
+              if (!newState) {
+                onStopSpeech?.();
+              } else {
+                onSpeak?.("Voice is enabled and working.", true);
+              }
+            }}
+          >
+            🔊 Voice {voiceEnabled ? "ON" : "OFF"}
+          </button>
+
+          {/* Test Voice button */}
+          <button
+            className="settings-account-btn green-outline"
+            onClick={() => {
+              onSpeak?.("Voice is enabled and working.", true);
+            }}
+          >
+            🎤 Test Voice
           </button>
 
           {/* Sign Out button */}
@@ -6638,11 +6496,44 @@ export default function App() {
   const [checkingOnboarding, setCheckingOnboarding] = useState(true);
 
   // activePage - which page to show (dashboard, medications, fitness, etc.)
-  const [activePage, setActivePage] = useState("dashboard");
+  const [activePage, setActivePageRaw] = useState("dashboard");
 
-  // Voice enabled state - controls whether voice announcements are on/off
-  // true = voice ON, false = voice OFF
-  const [voiceEnabled, setVoiceEnabled] = useState(true);
+  // Page name map for voice announcements
+  const PAGE_NAMES = {
+    dashboard: "Dashboard",
+    medications: "Medications",
+    fitness: "Fitness",
+    chat: "Chat",
+    profile: "Profile",
+    emergency: "Emergency",
+    settings: "Settings",
+    measurements: "Measurements",
+    "measurements-reminders": "Measurement Reminders",
+  };
+
+  // Wrapped setter that announces the page name
+  const setActivePage = (page) => {
+    setActivePageRaw(page);
+    const pageName = PAGE_NAMES[page] || page;
+    // Use a short timeout so the UI renders first
+    setTimeout(() => voice.speak(`${pageName} page`), 150);
+  };
+
+  // Voice enabled state - persisted in localStorage
+  const [voiceEnabled, setVoiceEnabled] = useState(() => {
+    try {
+      const stored = localStorage.getItem("medfit_voiceEnabled");
+      return stored === null ? true : stored === "true";
+    } catch { return true; }
+  });
+
+  // Persist voice setting whenever it changes
+  React.useEffect(() => {
+    try { localStorage.setItem("medfit_voiceEnabled", String(voiceEnabled)); } catch {}
+  }, [voiceEnabled]);
+
+  // useVoice hook for clean TTS access
+  const voice = useVoice(voiceEnabled);
 
   // Large text mode for accessibility
   const [largeTextEnabled, setLargeTextEnabled] = useState(false);
@@ -6850,7 +6741,10 @@ export default function App() {
   // If new user needs to complete onboarding
   if (showOnboarding) {
     return (
-      <Onboarding user={user} onComplete={() => setShowOnboarding(false)} />
+      <Onboarding user={user} onComplete={() => {
+        setShowOnboarding(false);
+        voice.speak("Onboarding complete. Welcome to MedFit.");
+      }} />
     );
   }
 
@@ -6918,6 +6812,10 @@ export default function App() {
         setLargeTextEnabled={setLargeTextEnabled}
         highContrastEnabled={highContrastEnabled}
         setHighContrastEnabled={setHighContrastEnabled}
+        voiceEnabled={voiceEnabled}
+        setVoiceEnabled={setVoiceEnabled}
+        onSpeak={speak}
+        onStopSpeech={stopSpeech}
       />
     ),
     measurements: (
