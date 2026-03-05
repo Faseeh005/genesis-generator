@@ -4423,6 +4423,98 @@ body,
   }
 } /* end @media (max-width: 768px) */
 
+/* ══════════════════════════════════════════════════════════════════════════════
+   MOBILE TYPOGRAPHY + FIT FIXES (non-functional UI polish)
+   ══════════════════════════════════════════════════════════════════════════════ */
+.notifications-dropdown {
+  max-width: calc(100vw - 24px);
+}
+
+.notifications-content {
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 768px) {
+  .page-title-main {
+    font-size: clamp(1.65rem, 6vw, 2rem) !important;
+    line-height: 1.2 !important;
+    word-break: break-word;
+  }
+
+  .page-subtitle {
+    font-size: clamp(0.85rem, 3.4vw, 0.95rem) !important;
+    line-height: 1.35 !important;
+  }
+
+  .header-right {
+    justify-content: flex-start !important;
+    flex-wrap: wrap !important;
+    row-gap: 8px !important;
+  }
+
+  .header-user {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    font-size: clamp(0.84rem, 3.2vw, 0.95rem) !important;
+  }
+
+  .card-white,
+  .quick-action-card,
+  .med-card,
+  .reminder-card,
+  .auth-card {
+    padding: 16px !important;
+  }
+
+  .section-title-lg {
+    font-size: clamp(1.05rem, 4.2vw, 1.25rem) !important;
+  }
+
+  .notifications-dropdown {
+    position: fixed !important;
+    left: 12px !important;
+    right: 12px !important;
+    top: 12px !important;
+    bottom: 12px !important;
+    width: auto !important;
+    max-width: none !important;
+    max-height: none !important;
+    z-index: 10010 !important;
+  }
+
+  .notifications-content {
+    max-height: none !important;
+  }
+
+  .modal {
+    width: calc(100vw - 24px) !important;
+    max-width: calc(100vw - 24px) !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .stats-row,
+  .summary-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .auth-card {
+    width: calc(100vw - 24px) !important;
+    max-width: calc(100vw - 24px) !important;
+    padding: 18px 14px !important;
+  }
+
+  .modal-footer {
+    flex-direction: column;
+  }
+
+  .modal-cancel,
+  .modal-submit {
+    width: 100%;
+  }
+}
+
+
 /* ═══════════════════════════════════════════════════════════════════════════
    HOW THE TOOLTIP WORKS:
    

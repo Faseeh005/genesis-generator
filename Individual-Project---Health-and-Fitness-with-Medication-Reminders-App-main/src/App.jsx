@@ -1384,6 +1384,7 @@ function Dashboard({ user, userProfile, medications, setActivePage }) {
               <>
                 {/* Backdrop to close dropdown when clicking outside */}
                 <div
+                  className="notifications-backdrop"
                   style={{
                     position: "fixed",
                     top: 0,
@@ -1397,6 +1398,7 @@ function Dashboard({ user, userProfile, medications, setActivePage }) {
 
                 {/* Dropdown panel */}
                 <div
+                  className="notifications-dropdown"
                   style={{
                     position: "absolute",
                     top: "calc(100% + 8px)",
@@ -1471,6 +1473,7 @@ function Dashboard({ user, userProfile, medications, setActivePage }) {
 
                   {/* Dropdown Content */}
                   <div
+                    className="notifications-content"
                     style={{
                       flex: 1,
                       overflowY: "auto",
