@@ -3,7 +3,6 @@ import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
 
-// https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
@@ -20,15 +19,11 @@ export default defineConfig(({ mode }) => ({
         "./src/shims/capacitor-native-biometric.ts",
       ),
       "capacitor-health": path.resolve(__dirname, "./src/shims/capacitor-health.ts"),
+      "@capgo/capacitor-native-biometric": path.resolve(
+        __dirname,
+        "./src/shims/capacitor-native-biometric.ts",
+      ),
       "@": path.resolve(__dirname, "./src"),
-    },
-  },
-  build: {
-    rollupOptions: {
-      external: [
-        'capacitor-native-biometric',
-        'capacitor-health',
-      ],
     },
   },
 }));
