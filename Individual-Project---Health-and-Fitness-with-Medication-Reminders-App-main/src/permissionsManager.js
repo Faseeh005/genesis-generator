@@ -181,11 +181,9 @@ const loadHealthPlugin = async () => {
       const module = await import(/* @vite-ignore */ "capacitor-health");
       healthPlugin = module.CapacitorHealthkit;
     } else if (isAndroid()) {
-      // For Android, we'll use Health Connect
-      // This requires the capacitor-health plugin to support Health Connect
-      // or a separate plugin like @AhsanAyaz/capacitor-health-connect
-      const module = await import(/* @vite-ignore */ "capacitor-health");
-      healthPlugin = module.CapacitorHealthkit;
+      // Use the custom native HealthConnect plugin registered on the Capacitor bridge
+      const plugins = (await import("@capacitor/core")).Capacitor.Plugins;
+      healthPlugin = plugins?.HealthConnect ?? null;
     }
     return healthPlugin;
   } catch (error) {
@@ -201,8 +199,13 @@ export const checkHealthAvailability = async () => {
     const plugin = await loadHealthPlugin();
     if (!plugin) return false;
 
-    const result = await plugin.isAvailable();
-    return result?.available || false;
+    if (isAndroid()) {
+      const result = await plugin.checkAvailability();
+      return result?.available || false;
+    } else {
+      const result = await plugin.isAvailable();
+      return result?.available || false;
+    }
   } catch (error) {
     console.log("Health availability check error:", error);
     return false;
@@ -216,20 +219,25 @@ export const requestHealthPermissions = async () => {
     const plugin = await loadHealthPlugin();
     if (!plugin) return false;
 
-    const readTypes = [
-      "HKQuantityTypeIdentifierStepCount",
-      "HKQuantityTypeIdentifierActiveEnergyBurned",
-      "HKQuantityTypeIdentifierHeartRate",
-      "HKQuantityTypeIdentifierDistanceWalkingRunning",
-    ];
+    if (isAndroid()) {
+      const result = await plugin.requestPermissions();
+      return result?.granted || false;
+    } else {
+      const readTypes = [
+        "HKQuantityTypeIdentifierStepCount",
+        "HKQuantityTypeIdentifierActiveEnergyBurned",
+        "HKQuantityTypeIdentifierHeartRate",
+        "HKQuantityTypeIdentifierDistanceWalkingRunning",
+      ];
 
-    await plugin.requestAuthorization({
-      all: readTypes,
-      read: readTypes,
-      write: [],
-    });
+      await plugin.requestAuthorization({
+        all: readTypes,
+        read: readTypes,
+        write: [],
+      });
 
-    return true;
+      return true;
+    }
   } catch (error) {
     console.log("Health authorization error:", error);
     return false;
