@@ -2,24 +2,6 @@ plugins {
     id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
 }
 
-// Patching plugins to fix deprecated proguard-android.txt usage with AGP 9.1.0+
-def patchPlugin(String pluginPath) {
-    def buildFile = new File(settingsDir, pluginPath)
-    if (buildFile.exists()) {
-        def content = buildFile.text
-        if (content.contains("proguard-android.txt")) {
-            println "Patching ${buildFile.absolutePath} to use proguard-android-optimize.txt"
-            def newContent = content.replace("'proguard-android.txt'", "'proguard-android-optimize.txt'")
-            newContent = newContent.replace("\"proguard-android.txt\"", "'proguard-android-optimize.txt'")
-            buildFile.text = newContent
-        }
-    }
-}
-
-patchPlugin('../node_modules/capacitor-health/android/build.gradle')
-patchPlugin('../node_modules/@capgo/capacitor-native-biometric/android/build.gradle')
-patchPlugin('../node_modules/@capacitor-community/text-to-speech/android/build.gradle')
-
 include ':app'
 include ':capacitor-cordova-android-plugins'
 project(':capacitor-cordova-android-plugins').projectDir = new File('./capacitor-cordova-android-plugins/')

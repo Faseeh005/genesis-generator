@@ -43,6 +43,8 @@ import {
 // VOICE — works on Android (Capacitor native TTS) AND web/iOS (Web Speech API)
 // window.speechSynthesis is silently broken in Android WebView, so we use tts.js
 import { speak, stopSpeaking } from "./tts";
+// Capacitor core — used to detect which platform we're running on (android/ios/web)
+import { Capacitor } from "@capacitor/core";
 
 // Function for Measurements page
 function Measurements({ user, setActivePage, initialTab }) {
@@ -774,7 +776,21 @@ function Measurements({ user, setActivePage, initialTab }) {
 // This is the main home page users see when they log in
 // Shows overview of health stats, water intake, charts, and quick action buttons
 
-function Dashboard({ user, userProfile, medications, setActivePage }) {
+function Dashboard({
+  user,
+  userProfile,
+  medications,
+  setActivePage,
+  // Health Connect data passed from App() so FitnessPage can share the same hook
+  healthData,
+  weeklySteps,
+  healthKitAvailable,
+  healthKitAuthorized,
+  healthKitLoading,
+  healthError,
+  requestHealthKitAuth,
+  refreshHealthData,
+}) {
   // fitness - stores today's fitness data (steps, water, activities)
   const [fitness, setFitness] = useState(null);
 
@@ -810,20 +826,9 @@ function Dashboard({ user, userProfile, medications, setActivePage }) {
   const refreshHealthData = async () => {};
   const weeklySteps = []; */
 
-  // Healthkit Integration connects to Apple HealthKit on iOS devices.
-  // On localhost it returns default values and isAvailable = false.
-
-  const {
-    isAvailable: healthKitAvailable, // Is HealthKit available? (iOS only)
-    isAuthorized: healthKitAuthorized, // Has user granted permission?
-    isLoading: healthKitLoading, // Is data being fetched?
-
-    healthData, // Today's health metrics
-    weeklySteps, // Past 7 days of steps
-
-    requestAuthorization: requestHealthKitAuth, // Function to request permission
-    refreshHealthData, // Function to refresh data
-  } = useHealthKit();
+  // Health Connect data is passed in as props from App() — see the function
+  // signature above. This lets FitnessPage share the same live data without
+  // running a second instance of the hook.
 
   // Date & Time Formatting
 
@@ -842,6 +847,22 @@ function Dashboard({ user, userProfile, medications, setActivePage }) {
   // User Data Calculations
 
   const userName = user.email.split("@")[0];
+
+  // Builds a fallback 7-day array when Health Connect isn't connected yet.
+  // All zeros except today which shows the manually-logged step count.
+  // Defined inline so it re-runs if `steps` changes.
+  function buildEmptyWeekFallback(todaySteps) {
+    const today = new Date();
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() - (6 - i));
+      return {
+        date: d.toISOString().split("T")[0],
+        dayName: d.toLocaleDateString("en-GB", { weekday: "short" }),
+        steps: i === 6 ? todaySteps || 0 : 0, // only today gets the manual count
+      };
+    });
+  }
   const steps = healthData.isFromHealthKit
     ? healthData.steps
     : fitness?.steps || 0;
@@ -859,15 +880,20 @@ function Dashboard({ user, userProfile, medications, setActivePage }) {
     ? healthData.calories
     : 0;
 
-  // Weekly steps for the bar chart
-  const weekDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  // Weekly steps for the bar chart.
+  // When Health Connect is connected, use real data from the hook (weeklySteps).
+  // Otherwise fall back to a 7-element array of zeros with today's manual count last.
+  const fallbackWeek = buildEmptyWeekFallback(steps);
+  const chartWeek =
+    healthData.isFromHealthKit && weeklySteps.length === 7
+      ? weeklySteps
+      : fallbackWeek;
 
-  const chartSteps =
-    healthData.isFromHealthKit && weeklySteps.length > 0
-      ? weeklySteps.map((day) => day.steps) // Extract steps from each day object
-      : [0, 0, 0, 0, 0, 0, steps || 0];
+  // Pull just the step counts for bar heights, and day labels for the x-axis
+  const chartSteps = chartWeek.map((d) => d.steps);
+  const chartDays = chartWeek.map((d) => d.dayName);
 
-  // Find the maximum steps for scaling the chart bars
+  // Find the tallest bar so every bar is scaled relative to the maximum
   const maxSteps = Math.max(...chartSteps, 1);
 
   // Calculate REAL medication adherence statistics
@@ -1811,63 +1837,87 @@ function Dashboard({ user, userProfile, medications, setActivePage }) {
           <p>Here's your health overview for today</p>
         </div>
       </div>
-      {/* This banner appears when:
-      The app is running on iOS (healthKitAvailable = true)
-      The user hasn't connected Apple Health yet (healthKitAuthorized = false)
-    
-      It prompts the user to connect their Apple Health data */}
+      {/*
+        HEALTH CONNECT BANNER — shown when Health Connect is available but
+        the user hasn't connected yet. Tapping Connect opens the native
+        Health Connect permissions dialog on Android.
+      */}
       {healthKitAvailable && !healthKitAuthorized && (
-        <div
-          style={{
-            // Gradient background from pink to purple
-            background: "linear-gradient(135deg, #ec4899, #8b5cf6)",
-            borderRadius: 14,
-            padding: "20px 24px",
-            marginBottom: 24,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            color: "white",
-            flexWrap: "wrap", // Allow wrapping on small screens
-            gap: 16,
-          }}
-        >
-          {/* Left side: Icon and text */}
-          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-            <span style={{ fontSize: 32 }}>❤️</span>
-            <div>
-              <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>
-                Connect Apple Health
-              </div>
-              <div style={{ fontSize: 13, opacity: 0.9 }}>
-                Sync your steps, calories, and heart rate automatically
-              </div>
-            </div>
-          </div>
-
-          {/* Right side: Connect button */}
-          <button
-            onClick={requestHealthKitAuth} // Call the authorization function
-            disabled={healthKitLoading} // Disable while loading
+        <div style={{ marginBottom: 16 }}>
+          {/* Main connect card */}
+          <div
             style={{
-              background: "white",
-              color: "#8b5cf6",
-              border: "none",
-              borderRadius: 8,
-              padding: "10px 20px",
-              fontWeight: 600,
-              cursor: healthKitLoading ? "not-allowed" : "pointer",
-              opacity: healthKitLoading ? 0.7 : 1,
+              background: "linear-gradient(135deg, #ec4899, #8b5cf6)",
+              borderRadius: 14,
+              padding: "20px 24px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              color: "white",
+              flexWrap: "wrap",
+              gap: 16,
             }}
           >
-            {healthKitLoading ? "Connecting..." : "Connect"}
-          </button>
+            {/* Left: icon + description */}
+            <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+              <span style={{ fontSize: 32 }}>❤️</span>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>
+                  Connect Health Data
+                </div>
+                <div style={{ fontSize: 13, opacity: 0.9 }}>
+                  Sync your steps, calories, and heart rate from Google Health
+                  Connect
+                </div>
+              </div>
+            </div>
+
+            {/* Right: Connect button — shows spinner while dialog is opening */}
+            <button
+              onClick={requestHealthKitAuth}
+              disabled={healthKitLoading}
+              style={{
+                background: "white",
+                color: "#8b5cf6",
+                border: "none",
+                borderRadius: 8,
+                padding: "10px 24px",
+                fontWeight: 700,
+                fontSize: 14,
+                cursor: healthKitLoading ? "not-allowed" : "pointer",
+                opacity: healthKitLoading ? 0.8 : 1,
+                minWidth: 110,
+              }}
+            >
+              {/* Show animated dots while the permission dialog is opening */}
+              {healthKitLoading ? "Opening..." : "Connect"}
+            </button>
+          </div>
+
+          {/* Error message — shown if the plugin couldn't open Health Connect.
+              Most common cause: forgot to run npx cap sync + rebuild in Android Studio */}
+          {healthError && (
+            <div
+              style={{
+                background: "#fef2f2",
+                border: "1px solid #fca5a5",
+                borderRadius: 8,
+                padding: "10px 14px",
+                marginTop: 8,
+                fontSize: 12,
+                color: "#dc2626",
+                lineHeight: 1.5,
+              }}
+            >
+              ⚠️ {healthError}
+            </div>
+          )}
         </div>
       )}
 
       {/*    
     This banner appears when:
-    Apple Health is successfully connected (healthKitAuthorized = true)
+    Health Connect is successfully connected (healthKitAuthorized = true)
     It shows the user that their data is syncing and provides a refresh button */}
       {healthKitAuthorized && (
         <div
@@ -1889,10 +1939,10 @@ function Dashboard({ user, userProfile, medications, setActivePage }) {
           {/* Status text */}
           <div style={{ flex: 1 }}>
             <span style={{ fontWeight: 600, color: "#166534" }}>
-              Apple Health Connected
+              Health Connect Active
             </span>
             <span style={{ color: "#64748b", marginLeft: 8, fontSize: 13 }}>
-              Steps & calories syncing automatically
+              Steps & calories syncing from Health Connect
             </span>
           </div>
 
@@ -1969,7 +2019,7 @@ function Dashboard({ user, userProfile, medications, setActivePage }) {
             label: "Steps Today",
             value: steps.toLocaleString() || "8,542",
             sub: healthData.isFromHealthKit
-              ? "From Apple Health" // If using HealthKit data
+              ? "From Health Connect" // If using HealthKit data
               : "Goal: 10,000", // If using manual/Firebase data
             color: "#f0fdf4",
           },
@@ -2041,7 +2091,7 @@ function Dashboard({ user, userProfile, medications, setActivePage }) {
                   fontWeight: 500,
                 }}
               >
-                ● Apple Health
+                ● Health Connect
               </span>
             )}{" "}
           </h3>
@@ -2054,7 +2104,7 @@ function Dashboard({ user, userProfile, medications, setActivePage }) {
                   style={{ height: `${(stepCount / maxSteps) * 140}px` }}
                   title={`${stepCount.toLocaleString()} steps`}
                 ></div>
-                <div className="bar-label">{weekDays[index]}</div>
+                <div className="bar-label">{chartDays[index]}</div>
               </div>
             ))}
           </div>
@@ -3226,7 +3276,13 @@ function Medications({
 // Page for tracking exercises and viewing fitness statistics
 // Shows workout cards, summary stats, and step counter
 
-function FitnessPage({ user, userProfile, setActivePage, voiceEnabled }) {
+function FitnessPage({
+  user,
+  userProfile,
+  setActivePage,
+  voiceEnabled,
+  healthData: liveHealthData,
+}) {
   // fitness - stores today's fitness data
   const [fitness, setFitness] = useState({
     steps: 0,
@@ -3561,22 +3617,32 @@ function FitnessPage({ user, userProfile, setActivePage, voiceEnabled }) {
   // Get activities array, default to empty if not available
   const activities = fitness.activities || [];
 
-  // Get steps count
-  const steps = fitness.steps || 0;
+  // Steps: prefer Health Connect live data if connected, fall back to Firebase
+  // liveHealthData is passed in from the parent where the health hook runs
+  const hasLiveSteps = liveHealthData?.isFromHealthKit === true;
+  const steps = hasLiveSteps
+    ? liveHealthData.steps // real-time step count from the phone's pedometer
+    : fitness.steps || 0; // manual entry saved in Firebase
 
-  // Calculate total minutes of all activities
+  // Total minutes from all logged exercise sessions today
   const totalMins = activities.reduce(
     (sum, activity) => sum + (activity.duration || 0),
     0,
   );
 
-  // Calculate total steps from activities + manual step count
-  const totalSteps =
-    activities.reduce((sum, activity) => sum + (activity.count || 0), 0) +
-    steps;
+  // Total steps: Health Connect already includes all sources, so we use it directly.
+  // If not connected, we add up any step counts logged on individual activities.
+  const totalSteps = hasLiveSteps
+    ? liveHealthData.steps
+    : activities.reduce((sum, activity) => sum + (activity.count || 0), 0) +
+      steps;
 
-  // Estimate calories burned (5.5 cal per minute is approximate)
-  const calories = Math.round(totalMins * 5.5);
+  // Calories: prefer Health Connect active calories, otherwise estimate from duration.
+  // 5.5 kcal/min is a rough average across light-to-moderate exercise.
+  const calories =
+    hasLiveSteps && liveHealthData.calories > 0
+      ? liveHealthData.calories // accurate figure from Health Connect
+      : Math.round(totalMins * 5.5); // estimate when Health Connect isn't connected
 
   // Add Workout Function
 
@@ -6454,6 +6520,26 @@ export default function App() {
 
   const [reminders, setReminders] = useState([]);
 
+  // ── Health Connect hook ────────────────────────────────────────────────────
+  // Moved here (into App) so that both Dashboard and FitnessPage can share the
+  // same live health data without running two separate instances of the hook.
+  // The hook only does real work on Android native — on web it returns zeros.
+  const {
+    isAvailable: healthAvailableFromHook,
+    isAuthorized: healthKitAuthorized,
+    isLoading: healthKitLoading,
+    error: healthError,
+    healthData,
+    weeklySteps,
+    requestAuthorization: requestHealthKitAuth,
+    refreshHealthData,
+  } = useHealthKit();
+
+  // On Android we always show the Connect button even before the availability
+  // check resolves — the permission request fails gracefully if HC isn't installed.
+  const isAndroidNative = Capacitor.getPlatform() === "android";
+  const healthKitAvailable = healthAvailableFromHook || isAndroidNative;
+
   // User profile data (for emergency contact)
   const [userProfile, setUserProfile] = useState({});
 
@@ -6686,6 +6772,14 @@ export default function App() {
         userProfile={userProfile}
         medications={medications}
         setActivePage={setActivePage}
+        healthData={healthData}
+        weeklySteps={weeklySteps}
+        healthKitAvailable={healthKitAvailable}
+        healthKitAuthorized={healthKitAuthorized}
+        healthKitLoading={healthKitLoading}
+        healthError={healthError}
+        requestHealthKitAuth={requestHealthKitAuth}
+        refreshHealthData={refreshHealthData}
       />
     ),
     medications: (
@@ -6704,6 +6798,7 @@ export default function App() {
         userProfile={userProfile}
         setActivePage={setActivePage}
         voiceEnabled={voiceEnabled}
+        healthData={healthData}
       />
     ),
     chat: (
