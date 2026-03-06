@@ -20,10 +20,15 @@ const getPlatform = () => {
 // Helper: get the native HealthConnect plugin on Android
 const getHealthConnectPlugin = () => {
   try {
-    // The Kotlin plugin is registered as "HealthConnect" on the Capacitor bridge
     const plugins = Capacitor.Plugins;
-    return plugins?.HealthConnect ?? null;
-  } catch {
+    const plugin = plugins?.HealthConnect ?? null;
+    console.log("[HealthKit] getHealthConnectPlugin:", plugin ? "FOUND" : "NOT FOUND");
+    if (plugin) {
+      console.log("[HealthKit] Plugin methods:", Object.keys(plugin));
+    }
+    return plugin;
+  } catch (e) {
+    console.error("[HealthKit] Error getting plugin:", e);
     return null;
   }
 };
@@ -65,20 +70,28 @@ export const useHealthKit = () => {
   // ── Android: fetch health data from native HealthConnect plugin ──────────
   const fetchAndroidHealthData = useCallback(async () => {
     const plugin = getHealthConnectPlugin();
-    if (!plugin) return;
+    if (!plugin) {
+      console.error("[HealthKit] Cannot fetch data - plugin not found");
+      return;
+    }
 
     try {
-      // Fetch today's data in parallel
+      console.log("[HealthKit] Fetching health data...");
+      
       const [stepsRes, caloriesRes, distanceRes, weeklyRes] = await Promise.all([
-        plugin.getTodaySteps().catch(() => ({ steps: 0 })),
-        plugin.getTodayCalories().catch(() => ({ calories: 0 })),
-        plugin.getTodayDistance().catch(() => ({ distance: 0 })),
-        plugin.getWeeklySteps().catch(() => ({ week: [] })),
+        plugin.getTodaySteps().catch((e) => { console.error("[HealthKit] getTodaySteps error:", e); return { steps: 0 }; }),
+        plugin.getTodayCalories().catch((e) => { console.error("[HealthKit] getTodayCalories error:", e); return { calories: 0 }; }),
+        plugin.getTodayDistance().catch((e) => { console.error("[HealthKit] getTodayDistance error:", e); return { distance: 0 }; }),
+        plugin.getWeeklySteps().catch((e) => { console.error("[HealthKit] getWeeklySteps error:", e); return { week: [] }; }),
       ]);
+
+      console.log("[HealthKit] Raw responses:", JSON.stringify({ stepsRes, caloriesRes, distanceRes, weeklyRes }));
 
       const steps = stepsRes?.steps ?? 0;
       const calories = caloriesRes?.calories ?? 0;
       const distance = distanceRes?.distance ?? 0;
+
+      console.log("[HealthKit] Parsed data - steps:", steps, "calories:", calories, "distance:", distance);
 
       setHealthData({
         steps,
@@ -87,56 +100,63 @@ export const useHealthKit = () => {
         distance,
         flightsClimbed: 0,
         heartRate: null,
-        isFromHealthKit: true, // flag used by dashboard to show real data
+        isFromHealthKit: true,
       });
 
       // Weekly steps
       let weekData = weeklyRes?.week;
+      console.log("[HealthKit] Weekly data type:", typeof weekData, "isArray:", Array.isArray(weekData), "value:", JSON.stringify(weekData));
+      
       if (weekData && Array.isArray(weekData) && weekData.length > 0) {
         setWeeklySteps(weekData);
       } else {
-        // Fallback: put today's steps in the last slot
         const empty = getEmptyWeekData();
         empty[empty.length - 1].steps = steps;
         setWeeklySteps(empty);
       }
     } catch (err) {
-      console.error("Error fetching Android health data:", err);
+      console.error("[HealthKit] Error fetching Android health data:", err);
       setError(err.message || "Failed to fetch health data");
     }
   }, []);
 
   // ── Android: check availability & permissions, then fetch ────────────────
   const initAndroid = useCallback(async () => {
+    console.log("[HealthKit] initAndroid called, platform:", platform);
     const plugin = getHealthConnectPlugin();
     if (!plugin) {
-      console.log("HealthConnect plugin not found on bridge");
+      console.error("[HealthKit] Plugin not found on bridge - is HealthPlugin registered in MainActivity?");
       setIsLoading(false);
       return;
     }
 
     try {
-      // Check if Health Connect is installed
+      console.log("[HealthKit] Checking availability...");
       const avail = await plugin.checkAvailability();
+      console.log("[HealthKit] Availability result:", JSON.stringify(avail));
       const available = avail?.available === true;
       setIsAvailable(available);
 
       if (!available) {
-        console.log("Health Connect not available:", avail?.status);
+        console.log("[HealthKit] Health Connect not available:", avail?.status);
         setIsLoading(false);
         return;
       }
 
-      // Check if permissions are already granted
+      console.log("[HealthKit] Checking permissions...");
       const perms = await plugin.checkPermissions();
+      console.log("[HealthKit] Permissions result:", JSON.stringify(perms));
       const granted = perms?.granted === true;
       setIsAuthorized(granted);
 
       if (granted) {
+        console.log("[HealthKit] Permissions granted, fetching data...");
         await fetchAndroidHealthData();
+      } else {
+        console.log("[HealthKit] Permissions NOT granted - user needs to authorize");
       }
     } catch (err) {
-      console.error("Android health init error:", err);
+      console.error("[HealthKit] Android health init error:", err);
       setError(err.message);
     } finally {
       setIsLoading(false);
@@ -145,22 +165,27 @@ export const useHealthKit = () => {
 
   // ── Request authorization ───────────────────────────────────────────────
   const requestAuthorization = useCallback(async () => {
+    console.log("[HealthKit] requestAuthorization called, platform:", platform);
     if (platform !== "android") return false;
 
     const plugin = getHealthConnectPlugin();
     if (!plugin) return false;
 
     try {
+      console.log("[HealthKit] Requesting permissions...");
       const result = await plugin.requestPermissions();
+      console.log("[HealthKit] requestPermissions result:", JSON.stringify(result));
+      
       if (result?.granted) {
         setIsAuthorized(true);
-        // Immediately fetch data after permission granted
         await fetchAndroidHealthData();
         return true;
+      } else {
+        console.log("[HealthKit] Permissions were NOT granted by user");
+        return false;
       }
-      return false;
     } catch (err) {
-      console.error("requestPermissions error:", err);
+      console.error("[HealthKit] requestPermissions error:", err);
       setError(err.message);
       return false;
     }
@@ -176,10 +201,10 @@ export const useHealthKit = () => {
 
   // ── Initialise on mount ─────────────────────────────────────────────────
   useEffect(() => {
+    console.log("[HealthKit] useEffect mount, platform:", platform);
     if (platform === "android") {
       initAndroid();
     } else {
-      // Web or iOS (iOS handled by capacitor-health / original hook if needed)
       setWeeklySteps(getEmptyWeekData());
       setIsLoading(false);
     }
