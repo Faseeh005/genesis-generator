@@ -819,25 +819,19 @@ function Dashboard({ user, userProfile, medications, setActivePage }) {
   const refreshHealthData = async () => {};
   const weeklySteps = []; */
 
-  // Health Connect / HealthKit integration
-  // Android: reads from Health Connect (Samsung Health, Google Fit, etc.)
-  // iOS: reads from Apple HealthKit
-  // Web: returns default/zero values
+  // Healthkit Integration connects to Apple HealthKit on iOS devices.
+  // On localhost it returns default values and isAvailable = false.
 
   const {
-    isAvailable: healthKitAvailable,
-    isAuthorized: healthKitAuthorized,
-    isLoading: healthKitLoading,
-    error: healthError,
+    isAvailable: healthKitAvailable, // Is HealthKit available? (iOS only)
+    isAuthorized: healthKitAuthorized, // Has user granted permission?
+    isLoading: healthKitLoading, // Is data being fetched?
 
-    healthData,
-    weeklySteps,
-    healthConnectStatus,
-    dataSources,
+    healthData, // Today's health metrics
+    weeklySteps, // Past 7 days of steps
 
-    requestAuthorization: requestHealthKitAuth,
-    refreshHealthData,
-    openHealthConnectSettings,
+    requestAuthorization: requestHealthKitAuth, // Function to request permission
+    refreshHealthData, // Function to refresh data
   } = useHealthKit();
 
   // Date & Time Formatting
@@ -1880,12 +1874,11 @@ function Dashboard({ user, userProfile, medications, setActivePage }) {
     This banner appears when:
     Apple Health is successfully connected (healthKitAuthorized = true)
     It shows the user that their data is syncing and provides a refresh button */}
-      {/* Health Connect / HealthKit Status Banner */}
       {healthKitAuthorized && (
         <div
           style={{
-            background: "#f0fdf4",
-            border: "2px solid #22c55e",
+            background: "#f0fdf4", // Light green background
+            border: "2px solid #22c55e", // Green border
             borderRadius: 10,
             padding: "12px 16px",
             marginBottom: 16,
@@ -1895,19 +1888,23 @@ function Dashboard({ user, userProfile, medications, setActivePage }) {
             flexWrap: "wrap",
           }}
         >
+          {/* Checkmark icon */}
           <span style={{ fontSize: 20 }}>✅</span>
+
+          {/* Status text */}
           <div style={{ flex: 1 }}>
             <span style={{ fontWeight: 600, color: "#166534" }}>
-              Health Connect Active
+              Apple Health Connected
             </span>
             <span style={{ color: "#64748b", marginLeft: 8, fontSize: 13 }}>
               Steps & calories syncing automatically
-              {dataSources.length > 0 && ` (${dataSources.length} source${dataSources.length > 1 ? 's' : ''})`}
             </span>
           </div>
+
+          {/* Refresh button */}
           <button
-            onClick={refreshHealthData}
-            disabled={healthKitLoading}
+            onClick={refreshHealthData} // Manually refresh data
+            disabled={healthKitLoading} // Disable while loading
             style={{
               background: "#22c55e",
               color: "white",
@@ -1921,119 +1918,6 @@ function Dashboard({ user, userProfile, medications, setActivePage }) {
           >
             {healthKitLoading ? "..." : "🔄 Refresh"}
           </button>
-        </div>
-      )}
-
-      {/* Health Connect not authorized - show connect button */}
-      {healthKitAvailable && !healthKitAuthorized && !healthKitLoading && (
-        <div
-          style={{
-            background: "#fffbeb",
-            border: "2px solid #f59e0b",
-            borderRadius: 10,
-            padding: "12px 16px",
-            marginBottom: 16,
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            flexWrap: "wrap",
-          }}
-        >
-          <span style={{ fontSize: 20 }}>🔗</span>
-          <div style={{ flex: 1 }}>
-            <span style={{ fontWeight: 600, color: "#92400e" }}>
-              Connect Health Data
-            </span>
-            <span style={{ color: "#64748b", marginLeft: 8, fontSize: 13 }}>
-              Grant access to sync steps from Samsung Health / Google Fit
-            </span>
-          </div>
-          <button
-            onClick={requestHealthKitAuth}
-            style={{
-              background: "#f59e0b",
-              color: "white",
-              border: "none",
-              borderRadius: 6,
-              padding: "6px 12px",
-              fontSize: 12,
-              cursor: "pointer",
-            }}
-          >
-            Connect
-          </button>
-        </div>
-      )}
-
-      {/* Health Connect not installed */}
-      {!healthKitAvailable && !healthKitLoading && healthConnectStatus === "not_installed" && (
-        <div
-          style={{
-            background: "#fef2f2",
-            border: "2px solid #ef4444",
-            borderRadius: 10,
-            padding: "12px 16px",
-            marginBottom: 16,
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            flexWrap: "wrap",
-          }}
-        >
-          <span style={{ fontSize: 20 }}>⚠️</span>
-          <div style={{ flex: 1 }}>
-            <span style={{ fontWeight: 600, color: "#991b1b" }}>
-              Health Connect Required
-            </span>
-            <span style={{ color: "#64748b", marginLeft: 8, fontSize: 13 }}>
-              Install Health Connect from Play Store to enable step tracking
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* Samsung Health guidance when steps are 0 but authorized */}
-      {healthKitAuthorized && healthData.steps === 0 && !healthKitLoading && (
-        <div
-          style={{
-            background: "#eff6ff",
-            border: "2px solid #3b82f6",
-            borderRadius: 10,
-            padding: "12px 16px",
-            marginBottom: 16,
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            flexWrap: "wrap",
-          }}
-        >
-          <span style={{ fontSize: 20 }}>💡</span>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 600, color: "#1e40af", marginBottom: 4 }}>
-              No step data found
-            </div>
-            <div style={{ color: "#64748b", fontSize: 13, lineHeight: 1.4 }}>
-              If using Samsung Health, open Samsung Health → Settings → Connected Apps → enable Health Connect sync.
-              Then open Health Connect → App permissions → allow this app to read steps.
-            </div>
-          </div>
-          {openHealthConnectSettings && (
-            <button
-              onClick={openHealthConnectSettings}
-              style={{
-                background: "#3b82f6",
-                color: "white",
-                border: "none",
-                borderRadius: 6,
-                padding: "6px 12px",
-                fontSize: 12,
-                cursor: "pointer",
-                whiteSpace: "nowrap",
-              }}
-            >
-              Open Settings
-            </button>
-          )}
         </div>
       )}
 
@@ -2090,8 +1974,8 @@ function Dashboard({ user, userProfile, medications, setActivePage }) {
             label: "Steps Today",
             value: steps.toLocaleString() || "8,542",
             sub: healthData.isFromHealthKit
-              ? "From Health Connect"
-              : "Goal: 10,000",
+              ? "From Apple Health" // If using HealthKit data
+              : "Goal: 10,000", // If using manual/Firebase data
             color: "#f0fdf4",
           },
           {
@@ -2157,12 +2041,12 @@ function Dashboard({ user, userProfile, medications, setActivePage }) {
               <span
                 style={{
                   fontSize: 11,
-                  color: "#22c55e",
+                  color: "#22c55e", // Green color
                   marginLeft: 8,
                   fontWeight: 500,
                 }}
               >
-                ● Health Connect
+                ● Apple Health
               </span>
             )}{" "}
           </h3>

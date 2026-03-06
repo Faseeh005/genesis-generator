@@ -1,13 +1,14 @@
-// useHealthKit - Cross-platform health data hook
+// useHealthKit CUSTOM HOOK
 //
-// Android: uses custom HealthConnect Capacitor plugin (Kotlin bridge)
-// iOS: uses capacitor-health (HealthKit)
-// Web: returns default/zero values
+// Cross-platform hook that works on:
+// - iOS: uses capacitor-health (HealthKit)
+// - Android: uses the custom HealthConnect Capacitor plugin (Kotlin)
+// - Web: returns default/zero values
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { Capacitor } from "@capacitor/core";
 
-// ── Platform detection ────────────────────────────────────────────────────
+// Helper: detect platform
 const getPlatform = () => {
   try {
     return Capacitor.getPlatform(); // 'android' | 'ios' | 'web'
@@ -16,26 +17,23 @@ const getPlatform = () => {
   }
 };
 
-// ── Get native HealthConnect plugin (Android only) ────────────────────────
+// Helper: get the native HealthConnect plugin on Android
 const getHealthConnectPlugin = () => {
   try {
-    // On Android, this is registered via registerPlugin(HealthPlugin::class.java) in MainActivity
-    // and exposed as Capacitor.Plugins.HealthConnect
-    const { HealthConnect } = Capacitor.Plugins;
-    if (HealthConnect) {
-      console.log("[HealthConnect] Plugin found on Capacitor bridge");
-      return HealthConnect;
+    const plugins = Capacitor.Plugins;
+    const plugin = plugins?.HealthConnect ?? null;
+    console.log("[HealthKit] getHealthConnectPlugin:", plugin ? "FOUND" : "NOT FOUND");
+    if (plugin) {
+      console.log("[HealthKit] Plugin methods:", Object.keys(plugin));
     }
-    console.warn("[HealthConnect] Plugin NOT found on Capacitor.Plugins");
-    console.log("[HealthConnect] Available plugins:", Object.keys(Capacitor.Plugins || {}));
-    return null;
+    return plugin;
   } catch (e) {
-    console.error("[HealthConnect] Error accessing plugin:", e);
+    console.error("[HealthKit] Error getting plugin:", e);
     return null;
   }
 };
 
-// ── Empty week data helper ────────────────────────────────────────────────
+// Helper: build empty week array
 const getEmptyWeekData = () => {
   const now = new Date();
   return Array.from({ length: 7 }, (_, idx) => {
@@ -55,8 +53,6 @@ export const useHealthKit = () => {
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [healthConnectStatus, setHealthConnectStatus] = useState("checking"); // checking | installed | update_required | not_installed | error
-  const [dataSources, setDataSources] = useState([]);
   const [healthData, setHealthData] = useState({
     steps: 0,
     calories: 0,
@@ -70,57 +66,32 @@ export const useHealthKit = () => {
 
   const platform = useRef(getPlatform()).current;
   const refreshIntervalRef = useRef(null);
-  const pluginRef = useRef(null);
 
-  // ── Get plugin reference (cached) ───────────────────────────────────────
-  const getPlugin = useCallback(() => {
-    if (!pluginRef.current) {
-      pluginRef.current = getHealthConnectPlugin();
-    }
-    return pluginRef.current;
-  }, []);
-
-  // ── Fetch health data from Health Connect ───────────────────────────────
+  // ── Android: fetch health data from native HealthConnect plugin ──────────
   const fetchAndroidHealthData = useCallback(async () => {
-    const plugin = getPlugin();
+    const plugin = getHealthConnectPlugin();
     if (!plugin) {
-      console.error("[HealthConnect] Cannot fetch - plugin unavailable");
+      console.error("[HealthKit] Cannot fetch data - plugin not found");
       return;
     }
 
     try {
-      console.log("[HealthConnect] Fetching today's health data...");
-
-      // Fetch all data in parallel
+      console.log("[HealthKit] Fetching health data...");
+      
       const [stepsRes, caloriesRes, distanceRes, weeklyRes] = await Promise.all([
-        plugin.getTodaySteps().catch((e) => {
-          console.error("[HealthConnect] getTodaySteps failed:", e);
-          return { steps: 0, error: String(e) };
-        }),
-        plugin.getTodayCalories().catch((e) => {
-          console.error("[HealthConnect] getTodayCalories failed:", e);
-          return { calories: 0, error: String(e) };
-        }),
-        plugin.getTodayDistance().catch((e) => {
-          console.error("[HealthConnect] getTodayDistance failed:", e);
-          return { distance: 0, error: String(e) };
-        }),
-        plugin.getWeeklySteps().catch((e) => {
-          console.error("[HealthConnect] getWeeklySteps failed:", e);
-          return { week: [], error: String(e) };
-        }),
+        plugin.getTodaySteps().catch((e) => { console.error("[HealthKit] getTodaySteps error:", e); return { steps: 0 }; }),
+        plugin.getTodayCalories().catch((e) => { console.error("[HealthKit] getTodayCalories error:", e); return { calories: 0 }; }),
+        plugin.getTodayDistance().catch((e) => { console.error("[HealthKit] getTodayDistance error:", e); return { distance: 0 }; }),
+        plugin.getWeeklySteps().catch((e) => { console.error("[HealthKit] getWeeklySteps error:", e); return { week: [] }; }),
       ]);
 
-      console.log("[HealthConnect] Steps response:", JSON.stringify(stepsRes));
-      console.log("[HealthConnect] Calories response:", JSON.stringify(caloriesRes));
-      console.log("[HealthConnect] Distance response:", JSON.stringify(distanceRes));
-      console.log("[HealthConnect] Weekly response:", JSON.stringify(weeklyRes));
+      console.log("[HealthKit] Raw responses:", JSON.stringify({ stepsRes, caloriesRes, distanceRes, weeklyRes }));
 
-      const steps = Number(stepsRes?.steps) || 0;
-      const calories = Number(caloriesRes?.calories) || 0;
-      const distance = Number(distanceRes?.distance) || 0;
+      const steps = stepsRes?.steps ?? 0;
+      const calories = caloriesRes?.calories ?? 0;
+      const distance = distanceRes?.distance ?? 0;
 
-      console.log("[HealthConnect] Final parsed: steps=" + steps + " calories=" + calories + " distance=" + distance);
+      console.log("[HealthKit] Parsed data - steps:", steps, "calories:", calories, "distance:", distance);
 
       setHealthData({
         steps,
@@ -129,188 +100,111 @@ export const useHealthKit = () => {
         distance,
         flightsClimbed: 0,
         heartRate: null,
-        isFromHealthKit: true, // true means "from native health source"
+        isFromHealthKit: true,
       });
 
-      // Process weekly steps
+      // Weekly steps
       let weekData = weeklyRes?.week;
-
-      // Handle Capacitor JSArray which might not be a real JS array
-      if (weekData && !Array.isArray(weekData)) {
-        // It might be a Capacitor JSArray - try to convert
-        try {
-          if (typeof weekData === "string") {
-            weekData = JSON.parse(weekData);
-          } else if (typeof weekData === "object" && weekData.length !== undefined) {
-            // Array-like object
-            weekData = Array.from({ length: weekData.length }, (_, i) => weekData[i]);
-          }
-        } catch (parseErr) {
-          console.warn("[HealthConnect] Could not parse weekly data:", parseErr);
-          weekData = [];
-        }
-      }
-
+      console.log("[HealthKit] Weekly data type:", typeof weekData, "isArray:", Array.isArray(weekData), "value:", JSON.stringify(weekData));
+      
       if (weekData && Array.isArray(weekData) && weekData.length > 0) {
-        console.log("[HealthConnect] Setting weekly steps:", weekData.length, "days");
         setWeeklySteps(weekData);
       } else {
-        console.log("[HealthConnect] No weekly data, using empty week with today's steps");
         const empty = getEmptyWeekData();
         empty[empty.length - 1].steps = steps;
         setWeeklySteps(empty);
       }
-
-      // Also fetch data sources for debugging
-      try {
-        const sourcesRes = await plugin.getDataSources();
-        console.log("[HealthConnect] Data sources:", JSON.stringify(sourcesRes));
-        if (sourcesRes?.sources) {
-          let sources = sourcesRes.sources;
-          if (!Array.isArray(sources)) {
-            try {
-              sources = typeof sources === "string" ? JSON.parse(sources) : Array.from({ length: sources.length }, (_, i) => sources[i]);
-            } catch { sources = []; }
-          }
-          setDataSources(sources);
-        }
-      } catch (srcErr) {
-        console.warn("[HealthConnect] Could not get data sources:", srcErr);
-      }
-
     } catch (err) {
-      console.error("[HealthConnect] fetchAndroidHealthData error:", err);
+      console.error("[HealthKit] Error fetching Android health data:", err);
       setError(err.message || "Failed to fetch health data");
     }
-  }, [getPlugin]);
+  }, []);
 
-  // ── Initialize Android Health Connect ───────────────────────────────────
+  // ── Android: check availability & permissions, then fetch ────────────────
   const initAndroid = useCallback(async () => {
-    console.log("[HealthConnect] Initializing on Android...");
-    const plugin = getPlugin();
-
+    console.log("[HealthKit] initAndroid called, platform:", platform);
+    const plugin = getHealthConnectPlugin();
     if (!plugin) {
-      console.error("[HealthConnect] Plugin not found! Make sure HealthPlugin is registered in MainActivity.");
-      console.log("[HealthConnect] Available Capacitor plugins:", Object.keys(Capacitor.Plugins || {}));
-      setHealthConnectStatus("error");
-      setError("Health Connect plugin not found. Rebuild the app with native changes.");
+      console.error("[HealthKit] Plugin not found on bridge - is HealthPlugin registered in MainActivity?");
       setIsLoading(false);
       return;
     }
 
     try {
-      // Step 1: Check if Health Connect is installed
-      console.log("[HealthConnect] Step 1: Checking availability...");
+      console.log("[HealthKit] Checking availability...");
       const avail = await plugin.checkAvailability();
-      console.log("[HealthConnect] Availability:", JSON.stringify(avail));
+      console.log("[HealthKit] Availability result:", JSON.stringify(avail));
+      const available = avail?.available === true;
+      setIsAvailable(available);
 
-      const status = avail?.status || "error";
-      setHealthConnectStatus(status);
-
-      if (!avail?.available) {
-        console.warn("[HealthConnect] Not available. Status:", status);
-        setIsAvailable(false);
+      if (!available) {
+        console.log("[HealthKit] Health Connect not available:", avail?.status);
         setIsLoading(false);
         return;
       }
 
-      setIsAvailable(true);
-      console.log("[HealthConnect] Health Connect is available!");
-
-      // Step 2: Check permissions
-      console.log("[HealthConnect] Step 2: Checking permissions...");
+      console.log("[HealthKit] Checking permissions...");
       const perms = await plugin.checkPermissions();
-      console.log("[HealthConnect] Permissions:", JSON.stringify(perms));
-
+      console.log("[HealthKit] Permissions result:", JSON.stringify(perms));
       const granted = perms?.granted === true;
       setIsAuthorized(granted);
 
       if (granted) {
-        console.log("[HealthConnect] Permissions already granted, fetching data...");
+        console.log("[HealthKit] Permissions granted, fetching data...");
         await fetchAndroidHealthData();
       } else {
-        console.log("[HealthConnect] Permissions NOT granted (have " + (perms?.grantedCount || 0) + "/" + (perms?.requiredCount || 3) + ")");
-        console.log("[HealthConnect] User needs to call requestAuthorization()");
+        console.log("[HealthKit] Permissions NOT granted - user needs to authorize");
       }
     } catch (err) {
-      console.error("[HealthConnect] Init error:", err);
+      console.error("[HealthKit] Android health init error:", err);
       setError(err.message);
-      setHealthConnectStatus("error");
     } finally {
       setIsLoading(false);
     }
-  }, [getPlugin, fetchAndroidHealthData]);
+  }, [fetchAndroidHealthData]);
 
   // ── Request authorization ───────────────────────────────────────────────
   const requestAuthorization = useCallback(async () => {
-    console.log("[HealthConnect] requestAuthorization called, platform:", platform);
-    if (platform !== "android") {
-      console.log("[HealthConnect] Not on Android, skipping");
-      return false;
-    }
+    console.log("[HealthKit] requestAuthorization called, platform:", platform);
+    if (platform !== "android") return false;
 
-    const plugin = getPlugin();
-    if (!plugin) {
-      console.error("[HealthConnect] Plugin not available for permission request");
-      return false;
-    }
+    const plugin = getHealthConnectPlugin();
+    if (!plugin) return false;
 
     try {
-      console.log("[HealthConnect] Launching permission request...");
+      console.log("[HealthKit] Requesting permissions...");
       const result = await plugin.requestPermissions();
-      console.log("[HealthConnect] Permission result:", JSON.stringify(result));
-
+      console.log("[HealthKit] requestPermissions result:", JSON.stringify(result));
+      
       if (result?.granted) {
-        console.log("[HealthConnect] Permissions GRANTED! Fetching data...");
         setIsAuthorized(true);
-        setError(null);
         await fetchAndroidHealthData();
         return true;
       } else {
-        console.warn("[HealthConnect] Permissions DENIED by user");
-        setError("Health Connect permissions were denied. Please grant access in Settings > Apps > Health Connect.");
+        console.log("[HealthKit] Permissions were NOT granted by user");
         return false;
       }
     } catch (err) {
-      console.error("[HealthConnect] requestPermissions error:", err);
+      console.error("[HealthKit] requestPermissions error:", err);
       setError(err.message);
       return false;
     }
-  }, [platform, getPlugin, fetchAndroidHealthData]);
+  }, [platform, fetchAndroidHealthData]);
 
   // ── Refresh health data ─────────────────────────────────────────────────
   const refreshHealthData = useCallback(async () => {
-    console.log("[HealthConnect] refreshHealthData called");
     if (platform === "android" && isAuthorized) {
-      setIsLoading(true);
-      try {
-        await fetchAndroidHealthData();
-      } finally {
-        setIsLoading(false);
-      }
+      await fetchAndroidHealthData();
     }
     return { healthData, weeklySteps };
   }, [platform, isAuthorized, fetchAndroidHealthData, healthData, weeklySteps]);
 
-  // ── Open Health Connect settings (for Samsung Health sync) ──────────────
-  const openHealthConnectSettings = useCallback(async () => {
-    const plugin = getPlugin();
-    if (plugin) {
-      try {
-        await plugin.openHealthConnectSettings();
-      } catch (e) {
-        console.error("[HealthConnect] Could not open settings:", e);
-      }
-    }
-  }, [getPlugin]);
-
-  // ── Initialize on mount ─────────────────────────────────────────────────
+  // ── Initialise on mount ─────────────────────────────────────────────────
   useEffect(() => {
-    console.log("[HealthConnect] useEffect mount, platform:", platform);
+    console.log("[HealthKit] useEffect mount, platform:", platform);
     if (platform === "android") {
       initAndroid();
     } else {
-      // Web/iOS: set defaults
       setWeeklySteps(getEmptyWeekData());
       setIsLoading(false);
     }
@@ -319,16 +213,11 @@ export const useHealthKit = () => {
   // ── Auto-refresh every 5 minutes when authorized ───────────────────────
   useEffect(() => {
     if (platform === "android" && isAuthorized) {
-      console.log("[HealthConnect] Starting 5-minute auto-refresh");
       refreshIntervalRef.current = setInterval(() => {
-        console.log("[HealthConnect] Auto-refreshing...");
         fetchAndroidHealthData();
       }, 5 * 60 * 1000);
 
-      return () => {
-        console.log("[HealthConnect] Stopping auto-refresh");
-        clearInterval(refreshIntervalRef.current);
-      };
+      return () => clearInterval(refreshIntervalRef.current);
     }
   }, [platform, isAuthorized, fetchAndroidHealthData]);
 
@@ -339,11 +228,8 @@ export const useHealthKit = () => {
     error,
     healthData,
     weeklySteps,
-    healthConnectStatus,
-    dataSources,
     requestAuthorization,
     refreshHealthData,
-    openHealthConnectSettings,
   };
 };
 

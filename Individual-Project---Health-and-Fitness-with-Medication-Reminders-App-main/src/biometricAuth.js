@@ -16,8 +16,7 @@ const loadBiometricPlugin = async () => {
   if (NativeBiometric) return NativeBiometric;
 
   try {
-    const moduleName = "capacitor-native-biometric";
-    const module = await import(/* webpackIgnore: true */ /* @vite-ignore */ moduleName);
+    const module = await import(/* @vite-ignore */ "capacitor-native-biometric");
     NativeBiometric = module.NativeBiometric;
     return NativeBiometric;
   } catch (error) {
