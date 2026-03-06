@@ -1,83 +1,206 @@
 // useHealthKit CUSTOM HOOK
 //
-// What is a "Custom Hook"?
-// A custom hook is a reusable piece of logic that can use React features
-// (like useState and useEffect). It always starts with "use".
-//
-// Why use a custom hook?
-// 1. Separates HealthKit logic from the UI components
-// 2. Makes the code reusable - any component can use this hook
-// 3. Keeps components clean and focused on displaying UI
-//
-// What this hook does:
-// 1. Checks if HealthKit is available when the component mounts
-// 2. Provides a function to request authorization
-// 3. Fetches health data and stores it in state
-// 4. Auto-refreshes data every 5 minutes
-// 5. Provides loading and error states
+// Cross-platform hook that works on:
+// - iOS: uses capacitor-health (HealthKit)
+// - Android: uses the custom HealthConnect Capacitor plugin (Kotlin)
+// - Web: returns default/zero values
 
-// useHealthKit CUSTOM HOOK - FIXED FOR ANDROID
-//
-// This hook safely handles both iOS (with HealthKit) and Android (without HealthKit)
-// On Android, it returns default values without trying to load iOS-only plugins
+import { useEffect, useState, useCallback, useRef } from "react";
+import { Capacitor } from "@capacitor/core";
 
-import { useEffect, useMemo, useState } from "react";
+// Helper: detect platform
+const getPlatform = () => {
+  try {
+    return Capacitor.getPlatform(); // 'android' | 'ios' | 'web'
+  } catch {
+    return "web";
+  }
+};
+
+// Helper: get the native HealthConnect plugin on Android
+const getHealthConnectPlugin = () => {
+  try {
+    // The Kotlin plugin is registered as "HealthConnect" on the Capacitor bridge
+    const plugins = Capacitor.Plugins;
+    return plugins?.HealthConnect ?? null;
+  } catch {
+    return null;
+  }
+};
+
+// Helper: build empty week array
+const getEmptyWeekData = () => {
+  const now = new Date();
+  return Array.from({ length: 7 }, (_, idx) => {
+    const i = 6 - idx;
+    const date = new Date(now);
+    date.setDate(date.getDate() - i);
+    return {
+      date: date.toISOString().split("T")[0],
+      dayName: date.toLocaleDateString("en-GB", { weekday: "short" }),
+      steps: 0,
+    };
+  });
+};
 
 export const useHealthKit = () => {
-  const [weeklySteps, setWeeklySteps] = useState([]);
+  const [isAvailable, setIsAvailable] = useState(false);
+  const [isAuthorized, setIsAuthorized] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [healthData, setHealthData] = useState({
+    steps: 0,
+    calories: 0,
+    activeCalories: 0,
+    distance: 0,
+    flightsClimbed: 0,
+    heartRate: null,
+    isFromHealthKit: false,
+  });
+  const [weeklySteps, setWeeklySteps] = useState([]);
 
-  // Stable default health data object (won’t change identity every render)
-  const healthData = useMemo(
-    () => ({
-      steps: 0,
-      calories: 0,
-      activeCalories: 0,
-      distance: 0,
-      flightsClimbed: 0,
-      heartRate: null,
-      isFromHealthKit: false,
-    }),
-    [],
-  );
+  const platform = useRef(getPlatform()).current;
+  const refreshIntervalRef = useRef(null);
 
-  /* useEffect(() => {
-    // Build a 7-day array (oldest -> newest)
-    const now = new Date();
-    const defaultWeekly = Array.from({ length: 7 }, (_, idx) => {
-      const i = 6 - idx;
-      const date = new Date(now);
-      date.setDate(date.getDate() - i);
+  // ── Android: fetch health data from native HealthConnect plugin ──────────
+  const fetchAndroidHealthData = useCallback(async () => {
+    const plugin = getHealthConnectPlugin();
+    if (!plugin) return;
 
-      return {
-        date: date.toISOString().split("T")[0],
-        dayName: date.toLocaleDateString("en-GB", { weekday: "short" }),
-        steps: 0,
-      };
-    });
+    try {
+      // Fetch today's data in parallel
+      const [stepsRes, caloriesRes, distanceRes, weeklyRes] = await Promise.all([
+        plugin.getTodaySteps().catch(() => ({ steps: 0 })),
+        plugin.getTodayCalories().catch(() => ({ calories: 0 })),
+        plugin.getTodayDistance().catch(() => ({ distance: 0 })),
+        plugin.getWeeklySteps().catch(() => ({ week: [] })),
+      ]);
 
-    setWeeklySteps(defaultWeekly);
-    setIsLoading(false);
-  }, []); */
+      const steps = stepsRes?.steps ?? 0;
+      const calories = caloriesRes?.calories ?? 0;
+      const distance = distanceRes?.distance ?? 0;
 
-  const requestAuthorization = async () => {
-    // HealthKit is iOS-only, so always false on Android
-    return false;
-  };
+      setHealthData({
+        steps,
+        calories,
+        activeCalories: calories,
+        distance,
+        flightsClimbed: 0,
+        heartRate: null,
+        isFromHealthKit: true, // flag used by dashboard to show real data
+      });
 
-  const refreshHealthData = async () => {
-    // No-op on Android; return current defaults
-    return {
-      healthData,
-      weeklySteps,
-    };
-  };
+      // Weekly steps
+      let weekData = weeklyRes?.week;
+      if (weekData && Array.isArray(weekData) && weekData.length > 0) {
+        setWeeklySteps(weekData);
+      } else {
+        // Fallback: put today's steps in the last slot
+        const empty = getEmptyWeekData();
+        empty[empty.length - 1].steps = steps;
+        setWeeklySteps(empty);
+      }
+    } catch (err) {
+      console.error("Error fetching Android health data:", err);
+      setError(err.message || "Failed to fetch health data");
+    }
+  }, []);
+
+  // ── Android: check availability & permissions, then fetch ────────────────
+  const initAndroid = useCallback(async () => {
+    const plugin = getHealthConnectPlugin();
+    if (!plugin) {
+      console.log("HealthConnect plugin not found on bridge");
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      // Check if Health Connect is installed
+      const avail = await plugin.checkAvailability();
+      const available = avail?.available === true;
+      setIsAvailable(available);
+
+      if (!available) {
+        console.log("Health Connect not available:", avail?.status);
+        setIsLoading(false);
+        return;
+      }
+
+      // Check if permissions are already granted
+      const perms = await plugin.checkPermissions();
+      const granted = perms?.granted === true;
+      setIsAuthorized(granted);
+
+      if (granted) {
+        await fetchAndroidHealthData();
+      }
+    } catch (err) {
+      console.error("Android health init error:", err);
+      setError(err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [fetchAndroidHealthData]);
+
+  // ── Request authorization ───────────────────────────────────────────────
+  const requestAuthorization = useCallback(async () => {
+    if (platform !== "android") return false;
+
+    const plugin = getHealthConnectPlugin();
+    if (!plugin) return false;
+
+    try {
+      const result = await plugin.requestPermissions();
+      if (result?.granted) {
+        setIsAuthorized(true);
+        // Immediately fetch data after permission granted
+        await fetchAndroidHealthData();
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error("requestPermissions error:", err);
+      setError(err.message);
+      return false;
+    }
+  }, [platform, fetchAndroidHealthData]);
+
+  // ── Refresh health data ─────────────────────────────────────────────────
+  const refreshHealthData = useCallback(async () => {
+    if (platform === "android" && isAuthorized) {
+      await fetchAndroidHealthData();
+    }
+    return { healthData, weeklySteps };
+  }, [platform, isAuthorized, fetchAndroidHealthData, healthData, weeklySteps]);
+
+  // ── Initialise on mount ─────────────────────────────────────────────────
+  useEffect(() => {
+    if (platform === "android") {
+      initAndroid();
+    } else {
+      // Web or iOS (iOS handled by capacitor-health / original hook if needed)
+      setWeeklySteps(getEmptyWeekData());
+      setIsLoading(false);
+    }
+  }, [platform, initAndroid]);
+
+  // ── Auto-refresh every 5 minutes when authorized ───────────────────────
+  useEffect(() => {
+    if (platform === "android" && isAuthorized) {
+      refreshIntervalRef.current = setInterval(() => {
+        fetchAndroidHealthData();
+      }, 5 * 60 * 1000);
+
+      return () => clearInterval(refreshIntervalRef.current);
+    }
+  }, [platform, isAuthorized, fetchAndroidHealthData]);
 
   return {
-    isAvailable: false, // HealthKit not available on Android
-    isAuthorized: false, // Can't authorize HealthKit on Android
+    isAvailable,
+    isAuthorized,
     isLoading,
-    error: null,
+    error,
     healthData,
     weeklySteps,
     requestAuthorization,
